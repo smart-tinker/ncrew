@@ -1,0 +1,19 @@
+{
+  "agents": [
+    {
+      "id": "claude",
+      "name": "Claude Code",
+      "command": "claude-code chat"
+    },
+    {
+      "id": "codex",
+      "name": "OpenAI Codex",
+      "command": "codex {message}"
+    }
+  ],
+  "ui": {
+    "theme": "default",
+    "history_limit": 200,
+    "show_timestamps": true
+  }
+}

@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ncrew"
+version = "0.1.0"
+description = "Terminal interface for coordinating multiple CLI coding agents"
+authors = [{name = "ncrew"}]
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "textual>=0.44",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4",
+]
+
+[project.scripts]
+ncrew = "ncrew.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["ncrew*"]
