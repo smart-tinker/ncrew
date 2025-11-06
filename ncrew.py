@@ -15,7 +15,7 @@ from config import Config, RoleConfig
 from storage.file_storage import FileStorage
 from connectors.base import BaseConnector
 from utils.logger import get_logger
-from utils.formatters import split_long_message, format_agent_response
+from utils.formatters import split_long_message
 
 
 class NeuroCrewLab:
@@ -215,29 +215,7 @@ class NeuroCrewLab:
         except Exception:
             return False
 
-    def _initialize_role_sequence(self):
-        """Initialize role sequence from configuration."""
-        try:
-            if not self.roles:
-                raise RuntimeError("No roles found in configuration. Please check your roles/agents.yaml configuration.")
 
-            # Load system prompts for each role
-            for role in self.roles:
-                if not role.system_prompt and hasattr(role, 'system_prompt_file') and role.system_prompt_file:
-                    try:
-                        with open(role.system_prompt_file, 'r', encoding='utf-8') as f:
-                            role.system_prompt = f.read().strip()
-                    except Exception as e:
-                        self.logger.error(f"Failed to load system prompt for {role.role_name}: {e}")
-                        role.system_prompt = f"You are a {role.display_name} helping with programming tasks."
-                elif not role.system_prompt:
-                    role.system_prompt = f"You are a {role.display_name} helping with programming tasks."
-
-            self.logger.info(f"Loaded {len(self.roles)} roles with system prompts")
-
-        except Exception as e:
-            self.logger.error(f"Failed to initialize role sequence: {e}")
-            raise
 
     def _filter_valid_roles(self) -> List[RoleConfig]:
         """

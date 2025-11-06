@@ -14,20 +14,23 @@ NeuroCrew Lab coordinates a roster of role-specific assistants inside a Telegram
 
 ## 🏗️ Architecture
 
-### Puppet Master Architecture
+### Role-Based Puppet Master Architecture
+
+NeuroCrew Lab uses a **role-based orchestration system** where each AI agent represents a specific role (Software Developer, Code Review, Architect, etc.). The system maintains collaborative discussions between roles until consensus is reached.
 
 ```
-User → Group Chat → Listener Bot → NeuroCrew Core → CLI Agents → Actor Bot → Group Chat
+User → Group Chat → Listener Bot → NeuroCrew Core → Role Sequence → CLI Agents → Actor Bots → Group Chat
 ```
 
 ### Components
 
 - **Listener Bot**: Reads every message in the target group chat
-- **NeuroCrew Core**: Coordinates agents, stores context, decides which role answers next
-- **Connector**: The unified `QwenACPConnector` that handles the ACP handshake with `qwen --experimental-acp`
-- **Actor Bots**: Individual bots that publish responses under their own names
-- **File Storage**: Conversation history and state management
-- **Target Chat Filtering**: Guarantees the system only runs in your designated group
+- **NeuroCrew Core**: Coordinates role-based agents, maintains conversation context, manages stateful sessions
+- **Role Configuration**: YAML-based role definitions in `roles/agents.yaml` with system prompts, CLI commands, and bot tokens
+- **Connector**: `QwenACPConnector` handles ACP protocol communication with Qwen CLI agents
+- **Actor Bots**: Role-specific bots that respond under their designated names
+- **File Storage**: Persistent conversation history and session state
+- **Target Chat Filtering**: Ensures operation only in designated Telegram groups
 
 ### Workflow
 
@@ -82,6 +85,16 @@ qwen                    # run once, choose OAuth in the interactive menu
 
 ## ⚙️ Configuration
 
+### Role Configuration
+
+Roles are defined in `roles/agents.yaml`. Each role specifies:
+- `role_name`: Unique identifier
+- `display_name`: Human-readable name
+- `telegram_bot_name`: Bot identifier for token lookup
+- `system_prompt_file`: Path to role's system prompt
+- `agent_type`: Connector type (currently "qwen_acp")
+- `cli_command`: Command to launch the agent
+
 ### Environment Variables
 
 ```env
@@ -91,11 +104,13 @@ MAIN_BOT_TOKEN=your_listener_bot_token
 # Telegram group ID where NeuroCrew operates
 TARGET_CHAT_ID=123456789
 
-# Actor bot tokens (one per role, uppercase <telegram_bot_name> + _TOKEN)
+# Role-specific bot tokens (automatically mapped from roles/agents.yaml)
 SOFTWAREDEVBOT_TOKEN=token_for_software_dev_bot
 CODEREVIEWBOT_TOKEN=token_for_code_review_bot
-PRODUCTOWNERBOT_TOKEN=token_for_product_owner_bot
-# ...repeat for every role listed in roles/agents.yaml
+ARCHITECTBOT_TOKEN=token_for_architect_bot
+DEVOPSBOT_TOKEN=token_for_devops_bot
+SCRUMMASTERBOT_TOKEN=token_for_scrum_master_bot
+# Tokens for inactive roles can be omitted
 
 # Optional: adjust runtime behaviour
 MAX_CONVERSATION_LENGTH=50
@@ -115,9 +130,17 @@ NeuroCrew Lab uses a **"Puppet Master"** layout:
 
 Make sure all bots are added to the same group with the appropriate permissions (listener requires `Read Messages`; actors need `Send Messages`).
 
-## 🤖 Supported Agents
+## 🤖 Supported Roles & Agents
 
-- **Qwen Code 0.1.4** (ACP mode) – active for every role today
+The system supports multiple roles, each powered by **Qwen Code 0.1.4** via ACP protocol:
+
+- **Software Developer**: Code implementation and technical solutions
+- **Code Review**: Quality assurance and code analysis
+- **Senior Architect**: System design and architectural decisions
+- **DevOps Senior**: Infrastructure and deployment
+- **Scrum Master**: Process coordination and team facilitation
+
+Additional roles can be added by extending `roles/agents.yaml`.
 
 ## 📱 Telegram Commands
 
