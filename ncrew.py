@@ -599,18 +599,24 @@ class NeuroCrewLab:
                 )
                 return idle_prompt, False
 
-        context_lines: List[str] = []
-        for msg in filtered_messages:
-            role_tag = msg.get('role', '')
-            content = msg.get('content', '')
+        # Determine context based on message types
+        user_messages = [msg for msg in filtered_messages if msg.get('role') == 'user']
+        agent_messages = [msg for msg in filtered_messages if msg.get('role') == 'agent']
 
-            if role_tag == 'user':
-                context_lines.append(f"User: {content}")
-            elif role_tag == 'agent':
+        if user_messages:
+            # New user input: focus only on the latest user message
+            latest_user_msg = user_messages[-1]
+            conversation_context = f"User: {latest_user_msg.get('content', '')}"
+        elif agent_messages:
+            # No new user input: continue discussion based on other agents' responses
+            context_lines: List[str] = []
+            for msg in agent_messages:
                 agent_name = msg.get('role_display_name', msg.get('role_name', 'Assistant'))
+                content = msg.get('content', '')
                 context_lines.append(f"Other Assistant ({agent_name}): {content}")
-
-        conversation_context = "\n\n".join(context_lines)
+            conversation_context = "\n\n".join(context_lines) if context_lines else ""
+        else:
+            conversation_context = ""
         if not has_user_update:
             idle_prompt = (
                 f"The updates since your last response do not include new user questions. "
@@ -618,12 +624,23 @@ class NeuroCrewLab:
             )
             return idle_prompt, False
 
-        prompt = (
-            f"You are {role.display_name}. Here are the new updates since your last reply:\n\n"
-            f"{conversation_context}\n\n"
-            "Continue the collaborative discussion. Provide insights that build on what others have said. "
-            "Do not restate what others said. If you have nothing new to add, answer with exactly five dots '.....'."
-        )
+        if user_messages:
+            # Direct response to user question
+            prompt = (
+                f"You are {role.display_name}.\n\n"
+                f"{conversation_context}\n\n"
+                "Answer this user question directly and helpfully. Provide a clear, concise response. "
+                "Do not discuss technical implementation details unless specifically asked. "
+                "If you have nothing relevant to add, answer with exactly five dots '.....'."
+            )
+        else:
+            # Continue discussion based on other agents
+            prompt = (
+                f"You are {role.display_name}. Here are the recent responses from other team members:\n\n"
+                f"{conversation_context}\n\n"
+                "Continue the collaborative discussion. Provide insights that build on what others have said. "
+                "Do not restate what others said. If you have nothing new to add, answer with exactly five dots '.....'."
+            )
 
         self.logger.debug(
             "Context for %s built from %d filtered messages (prompt len %d)",
