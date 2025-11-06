@@ -1,0 +1,106 @@
+# agents.yaml
+
+# Ролевая конфигурация NeuroCrew Lab
+# Порядок ролей в списке определяет их последовательность вызова
+
+roles:
+  # Роль: Software Developer (Qwen ACP v0.1.4)
+  - role_name: software_developer
+    display_name: "Software Developer"
+    telegram_bot_name: SoftwareDevBot
+    system_prompt_file: "roles/prompts/software_developer.md"
+    agent_type: "qwen_acp"
+    cli_command: "qwen --experimental-acp"
+    description: "Старший разработчик на базе ACP протокола qwen-code 0.1.4 с правильными методами"
+
+  # Роль: Code Review
+  - role_name: code_review
+    display_name: "Code Review"
+    telegram_bot_name: CodeReviewBot
+    system_prompt_file: "roles/prompts/code_review.md"
+    agent_type: "qwen_acp"
+    cli_command: "qwen --experimental-acp"
+    description: "Старший специалист по код-ревью, фокус на качестве и безопасности"
+
+  # Роль: Product Owner
+  - role_name: product_owner
+    display_name: "Product Owner"
+    telegram_bot_name: ProductOwnerBot
+
+    system_prompt_file: "roles/prompts/product_owner.md"
+    agent_type: "qwen_acp"
+    cli_command: "qwen --experimental-acp"
+    description: "Product Owner, управляет проектом и командой разработки"
+
+  # Роль: Senior Architect
+  - role_name: senior_architect
+    display_name: "Senior Architect"
+    telegram_bot_name: ArchitectBot
+
+    system_prompt_file: "roles/prompts/senior_architect.md"
+    agent_type: "qwen_acp"
+    cli_command: "qwen --experimental-acp"
+    description: "Senior Architect, проектирует современные программные решения"
+
+  # Роль: Product Analyst
+  - role_name: product_analyst
+    display_name: "Product Analyst"
+    telegram_bot_name: ProductAnalystBot
+
+    system_prompt_file: "roles/prompts/product_analyst.md"
+    agent_type: "qwen_acp"
+    cli_command: "qwen --experimental-acp"
+    description: "Product Analyst, анализирует требования и создает пользовательские истории"
+
+  # Роль: Security Analyst
+  - role_name: security_analyst
+    display_name: "Security Analyst"
+    telegram_bot_name: SecurityBot
+
+    system_prompt_file: "roles/prompts/security_analyst.md"
+    agent_type: "qwen_acp"
+    cli_command: "qwen --experimental-acp"
+    description: "Security Analyst, обеспечивает безопасность и защиту"
+
+  # Роль: DevOps Senior
+  - role_name: devops_senior
+    display_name: "DevOps Senior"
+    telegram_bot_name: DevOpsBot
+
+    system_prompt_file: "roles/prompts/devops_senior.md"
+    agent_type: "qwen_acp"
+    cli_command: "qwen --experimental-acp"
+    description: "Senior DevOps, отвечает за инфраструктуру и развертывание"
+
+  # Роль: SDET Senior
+  - role_name: sdet_senior
+    display_name: "SDET Senior"
+    telegram_bot_name: SDETBot
+
+    system_prompt_file: "roles/prompts/sdet_senior.md"
+    agent_type: "qwen_acp"
+    cli_command: "qwen --experimental-acp"
+    description: "Senior SDET, отвечает за тестовую стратегию и наставление команды"
+
+  # Роль: Scrum Master
+  - role_name: scrum_master
+    display_name: "Scrum Master"
+    telegram_bot_name: ScrumMasterBot
+
+    system_prompt_file: "roles/prompts/scrum_master.md"
+    agent_type: "qwen_acp"
+    cli_command: "qwen --experimental-acp"
+    description: "Scrum Master, обеспечивает Agile методологии"
+
+  # Роль: System Analyst
+  - role_name: system_analyst
+    display_name: "System Analyst"
+    telegram_bot_name: SystemAnalystBot
+
+    system_prompt_file: "roles/prompts/system_analyst.md"
+    agent_type: "qwen_acp"
+    cli_command: "qwen --experimental-acp"
+    description: "System Analyst, анализирует системы и бизнес-процессы"
+
+# Порядок ролей в списке выше определяет последовательность их вызова.
+# Больше никаких предопределенных последовательностей - гибкий порядок.

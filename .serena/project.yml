@@ -1,0 +1,5 @@
+project_name: ncrew
+language: python
+description: NeuroCrew Lab - Telegram bot for orchestrating multiple AI coding agents
+version: 0.1.0-mvp
+author: NeuroCrew Team
