@@ -97,6 +97,7 @@ class TelegramBot:
         self.application.add_handler(CommandHandler("help", self.cmd_help))
         self.application.add_handler(CommandHandler("reset", self.cmd_reset))
         self.application.add_handler(CommandHandler("status", self.cmd_status))
+        self.application.add_handler(CommandHandler("metrics", self.cmd_metrics))
         self.application.add_handler(CommandHandler("about", self.cmd_about))
         self.application.add_handler(CommandHandler("agents", self.cmd_agents))
         self.application.add_handler(CommandHandler("next", self.cmd_next_agent))
@@ -202,6 +203,34 @@ class TelegramBot:
         except Exception as e:
             self.logger.error(f"Error in /status command: {e}")
             await update.message.reply_text("❌ Sorry, an error occurred while getting status.")
+
+    async def cmd_metrics(self, update: Update, context: CallbackContext):
+        """
+        Handle /metrics command.
+
+        Args:
+            update: Telegram update
+            context: Callback context
+        """
+        try:
+            await self._ensure_ncrew_initialized()
+
+            metrics = self.ncrew.get_metrics()
+            metrics_msg = f"""📊 **Performance Metrics**
+
+🔄 **Agent Calls:** {metrics['total_agent_calls']}
+⏱️ **Total Response Time:** {metrics['total_response_time']:.2f}s
+📈 **Average Response Time:** {metrics['average_response_time']:.2f}s
+💬 **Conversations Processed:** {metrics['conversations_processed']}
+📝 **Messages Processed:** {metrics['messages_processed']}"""
+
+            await update.message.reply_text(metrics_msg, parse_mode='Markdown')
+
+            self.logger.info(f"User {update.effective_user.id} requested metrics")
+
+        except Exception as e:
+            self.logger.error(f"Error in /metrics command: {e}")
+            await update.message.reply_text("❌ Sorry, an error occurred while getting metrics.")
 
     async def cmd_about(self, update: Update, context: CallbackContext):
         """

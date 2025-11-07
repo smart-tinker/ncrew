@@ -181,8 +181,8 @@ class AgentValidator:
             error_result = subprocess.CompletedProcess(
                 args=command,
                 returncode=-2,
-                stdout='',
-                stdout=str(e)
+                stdout=str(e),
+                stderr=''
             )
             return error_result, duration
 

@@ -8,6 +8,7 @@ agent orchestration, conversation handling, and state management.
 import asyncio
 import logging
 import subprocess
+import time
 from datetime import datetime
 from typing import List, Dict, Optional, Any, Tuple, AsyncGenerator
 
@@ -44,8 +45,18 @@ class NeuroCrewLab:
         self.connector_sessions: Dict[Tuple[int, str], BaseConnector] = {}  # {(chat_id, role_name): connector}
         self.chat_role_pointers: Dict[int, int] = {}  # chat_id -> role_index
         self.role_last_seen_index: Dict[Tuple[int, str], int] = {}  # {(chat_id, role_name): message_index}
+        self.role_response_count: Dict[Tuple[int, str], int] = {}  # {(chat_id, role_name): response_count}
 
         self._shutdown_in_progress: bool = False
+
+        # Performance metrics
+        self.metrics = {
+            'total_agent_calls': 0,
+            'total_response_time': 0.0,
+            'average_response_time': 0.0,
+            'conversations_processed': 0,
+            'messages_processed': 0
+        }
 
         # Role-based mode is REQUIRED
         if not self.is_role_based:
@@ -175,9 +186,11 @@ class NeuroCrewLab:
         """Check if connector exists for agent type."""
         try:
             from connectors.qwen_acp_connector import QwenACPConnector
+            from connectors.gemini_acp_connector import GeminiACPConnector
 
             connector_map = {
                 'qwen_acp': QwenACPConnector,
+                'gemini_acp': GeminiACPConnector,
             }
 
             return agent_type.lower() in connector_map
@@ -323,6 +336,10 @@ class NeuroCrewLab:
                 self.logger.error("Failed to save user message")
                 yield (None, "❌ Error: Could not save your message")
                 return
+
+            # Update conversation metrics
+            self.metrics['conversations_processed'] += 1
+            self.metrics['messages_processed'] += 1
 
             # --- НАЧАЛО НЕПРЕРЫВНОГО АВТОНОМНОГО ЦИКЛА ---
             # Continue cycling through roles indefinitely, building conversation context
@@ -507,7 +524,7 @@ class NeuroCrewLab:
                 last_seen_index = max(len(conversation) - 6, 0)
 
             new_messages = conversation[last_seen_index:]
-            role_prompt, has_updates = self._format_conversation_for_role(new_messages, role)
+            role_prompt, has_updates = self._format_conversation_for_role(new_messages, role, chat_id)
 
             if has_updates:
                 # Get or create stateful connector for role
@@ -522,7 +539,34 @@ class NeuroCrewLab:
                     f"Chat {chat_id}: formatted prompt for {role.role_name} "
                     f"({len(role_prompt)} chars, updates={len(new_messages)})"
                 )
-                response = await role_connector.execute(role_prompt)
+
+                # Execute with retry logic for basic error recovery
+                max_retries = 2
+                response = None
+                response_time = 0
+
+                for attempt in range(max_retries):
+                    try:
+                        start_time = time.time()
+                        response = await role_connector.execute(role_prompt)
+                        response_time = time.time() - start_time
+                        break  # Success, exit retry loop
+                    except Exception as e:
+                        self.logger.warning(f"Role {role.role_name} execution attempt {attempt + 1} failed: {e}")
+                        if attempt < max_retries - 1:
+                            # Wait before retry
+                            await asyncio.sleep(1)
+                            continue
+                        else:
+                            # All retries failed
+                            raise e
+
+                # Update performance metrics
+                self.metrics['total_agent_calls'] += 1
+                self.metrics['total_response_time'] += response_time
+                self.metrics['average_response_time'] = self.metrics['total_response_time'] / self.metrics['total_agent_calls']
+
+                self.logger.info(f"Role {role.role_name} response time: {response_time:.2f}s")
                 self.logger.debug(f"Stateful execution with role: {role.role_name}")
             else:
                 response = '.....'
@@ -548,6 +592,11 @@ class NeuroCrewLab:
                 # Update last seen index for this role to the end of conversation (including new message)
                 self.role_last_seen_index[key] = len(conversation) + 1
 
+                # Update response count for system reminder tracking
+                if response != '.....':  # Don't count placeholder responses
+                    role_key = (chat_id, role.role_name)
+                    self.role_response_count[role_key] = self.role_response_count.get(role_key, 0) + 1
+
             self.logger.info(f"Role {role.role_name} processed message successfully")
             return response
 
@@ -560,7 +609,8 @@ class NeuroCrewLab:
     def _format_conversation_for_role(
         self,
         new_messages: List[Dict],
-        role: RoleConfig
+        role: RoleConfig,
+        chat_id: int
     ) -> Tuple[str, bool]:
         """
         Build role prompt from messages that appeared since the role's last response.
@@ -568,85 +618,55 @@ class NeuroCrewLab:
         Args:
             new_messages: Messages that happened after the role's previous turn
             role: Role configuration
+            chat_id: Chat ID for system reminder tracking
 
         Returns:
             Tuple[str, bool]: (prompt text, has_meaningful_updates)
         """
         if not new_messages:
-            idle_prompt = (
-                f"There have been no new messages since your last response. "
-                f"Reply with exactly five dots '.....' to confirm you have nothing to add."
-            )
-            return idle_prompt, False
+            return ".....", False
 
+        # Filter out placeholder responses
         filtered_messages = []
-        has_user_update = False
         for msg in new_messages:
             content = (msg.get('content') or '').strip()
             if content == '.....':
                 continue
             filtered_messages.append(msg)
-            if msg.get('role') == 'user':
-                has_user_update = True
 
         if not filtered_messages:
-            if has_user_update:
-                filtered_messages = [msg for msg in filtered_messages if msg.get('role') == 'user']
-            else:
-                idle_prompt = (
-                    f"The only updates were placeholders or other agents commenting without new user input. "
-                    f"Reply with exactly five dots '.....' to acknowledge you have nothing new."
-                )
-                return idle_prompt, False
+            return ".....", False
 
-        # Determine context based on message types
-        user_messages = [msg for msg in filtered_messages if msg.get('role') == 'user']
-        agent_messages = [msg for msg in filtered_messages if msg.get('role') == 'agent']
-
-        if user_messages:
-            # New user input: focus only on the latest user message
-            latest_user_msg = user_messages[-1]
-            conversation_context = f"User: {latest_user_msg.get('content', '')}"
-        elif agent_messages:
-            # No new user input: continue discussion based on other agents' responses
-            context_lines: List[str] = []
-            for msg in agent_messages:
+        # Build conversation context from all new messages
+        context_lines: List[str] = []
+        for msg in filtered_messages:
+            if msg.get('role') == 'user':
+                content = msg.get('content', '')
+                context_lines.append(f"User: {content}")
+            elif msg.get('role') == 'agent':
                 agent_name = msg.get('role_display_name', msg.get('role_name', 'Assistant'))
                 content = msg.get('content', '')
-                context_lines.append(f"Other Assistant ({agent_name}): {content}")
-            conversation_context = "\n\n".join(context_lines) if context_lines else ""
-        else:
-            conversation_context = ""
-        if not has_user_update:
-            idle_prompt = (
-                f"The updates since your last response do not include new user questions. "
-                f"Reply with exactly five dots '.....' to indicate you have nothing to add."
-            )
-            return idle_prompt, False
+                context_lines.append(f"Assistant ({agent_name}): {content}")
 
-        if user_messages:
-            # Direct response to user question
-            prompt = (
-                f"You are {role.display_name}.\n\n"
-                f"{conversation_context}\n\n"
-                "Answer this user question directly and helpfully. Provide a clear, concise response. "
-                "Do not discuss technical implementation details unless specifically asked. "
-                "If you have nothing relevant to add, answer with exactly five dots '.....'."
-            )
-        else:
-            # Continue discussion based on other agents
-            prompt = (
-                f"You are {role.display_name}. Here are the recent responses from other team members:\n\n"
-                f"{conversation_context}\n\n"
-                "Continue the collaborative discussion. Provide insights that build on what others have said. "
-                "Do not restate what others said. If you have nothing new to add, answer with exactly five dots '.....'."
-            )
+        conversation_context = "\n\n".join(context_lines)
+
+        # Check if we need system reminder
+        role_key = (chat_id, role.role_name)
+        response_count = self.role_response_count.get(role_key, 0)
+
+        if response_count > 0 and response_count % Config.SYSTEM_REMINDER_INTERVAL == 0:
+            # Add system reminder
+            system_reminder = f"\n\n--- SYSTEM REMINDER ---\n{role.system_prompt}\n--- END REMINDER ---\n\n"
+            conversation_context = system_reminder + conversation_context
+
+        prompt = conversation_context
 
         self.logger.debug(
-            "Context for %s built from %d filtered messages (prompt len %d)",
+            "Context for %s built from %d filtered messages (prompt len %d, response_count %d)",
             role.role_name,
             len(filtered_messages),
             len(prompt),
+            response_count,
         )
         return prompt, True
 
@@ -960,6 +980,15 @@ class NeuroCrewLab:
             self.logger.error(f"Error getting chat role summary: {e}")
             return {}
 
+    def get_metrics(self) -> Dict[str, Any]:
+        """
+        Get performance metrics for the NeuroCrew Lab instance.
+
+        Returns:
+            Dict[str, Any]: Performance metrics
+        """
+        return self.metrics.copy()
+
     async def set_agent_sequence(self, chat_id: int, role_sequence: List[str]) -> bool:
         """
         Set custom role sequence for a specific chat.
@@ -1056,9 +1085,11 @@ class NeuroCrewLab:
 
         # Import connectors dynamically to avoid circular imports
         from connectors.qwen_acp_connector import QwenACPConnector
+        from connectors.gemini_acp_connector import GeminiACPConnector
 
         connector_classes = {
             'qwen_acp': QwenACPConnector,
+            'gemini_acp': GeminiACPConnector,
         }
 
         connector_class = connector_classes.get(agent_type)

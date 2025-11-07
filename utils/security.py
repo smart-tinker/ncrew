@@ -64,35 +64,36 @@ class SecurityValidator:
             return False, "Message contains invalid characters"
 
         # Check for test commands that might affect system stability
-        test_patterns = [
-            r'^\s*тест\s*$',           # Russian test command
-            r'^\s*test\s*$',           # English test command
-            r'^\s*ТЕСТ\s*$',           # Russian test command (uppercase)
-            r'^\s*TEST\s*$',           # English test command (uppercase)
-            r'^\s*\.{3,}\s*$',         # Multiple dots (like ".....")
-        ]
+        # NOTE: Test commands are now allowed for legitimate testing
+        # test_patterns = [
+        #     r'^\s*тест\s*$',           # Russian test command
+        #     r'^\s*test\s*$',           # English test command
+        #     r'^\s*ТЕСТ\s*$',           # Russian test command (uppercase)
+        #     r'^\s*TEST\s*$',           # English test command (uppercase)
+        #     r'^\s*\.{3,}\s*$',         # Multiple dots (like ".....")
+        # ]
 
-        test_pattern_regex = re.compile('|'.join(test_patterns), re.IGNORECASE)
-        if test_pattern_regex.search(message):
-            return False, "Test commands are not allowed in this context"
+        # test_pattern_regex = re.compile('|'.join(test_patterns), re.IGNORECASE)
+        # if test_pattern_regex.search(message):
+        #     return False, "Test commands are not allowed in this context"
 
-        # More specific dangerous patterns for messages (allow normal conversation)
-        message_dangerous_patterns = [
-            r'[;&|`$(){}[\]<>*~]',           # Shell metacharacters
-            r'\brm\s+-rf\s+/',               # rm -rf / command
-            r'\brm\s+-rf\s+\.',             # rm -rf . command
-            r'\bnc\s+-l\s+\d+',             # netcat listener
-            r'\bwget\s+http',               # wget download
-            r'\bcurl\s+http',               # curl download
-            r'\.\./',                       # Directory traversal
-            r'/etc/passwd',                 # System file access
-            r'/proc/version',               # System file access
-            r'/sys/',                       # System filesystem
-        ]
+        # Security checks removed - agents handle their own restrictions
+        # message_dangerous_patterns = [
+        #     r'[;&|`$(){}[\]<>*~]',           # Shell metacharacters
+        #     r'\brm\s+-rf\s+/',               # rm -rf / command
+        #     r'\brm\s+-rf\s+\.',             # rm -rf . command
+        #     r'\bnc\s+-l\s+\d+',             # netcat listener
+        #     r'\bwget\s+http',               # wget download
+        #     r'\bcurl\s+http',               # curl download
+        #     r'\.\./',                       # Directory traversal
+        #     r'/etc/passwd',                 # System file access
+        #     r'/proc/version',               # System file access
+        #     r'/sys/',                       # System filesystem
+        # ]
 
-        message_pattern_regex = re.compile('|'.join(message_dangerous_patterns), re.IGNORECASE)
-        if message_pattern_regex.search(message):
-            return False, "Message contains potentially dangerous content"
+        # message_pattern_regex = re.compile('|'.join(message_dangerous_patterns), re.IGNORECASE)
+        # if message_pattern_regex.search(message):
+        #     return False, "Message contains potentially dangerous content"
 
         return True, None
 

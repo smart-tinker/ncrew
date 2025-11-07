@@ -2,7 +2,7 @@
 
 🚀 **Telegram-based orchestration platform for autonomous AI coding agents**
 
-NeuroCrew Lab coordinates a roster of role-specific assistants inside a Telegram group. Each role talks directly to the official **Qwen Code 0.1.4** CLI via the ACP protocol, keeping long-lived sessions and streaming responses back to the chat.
+NeuroCrew Lab coordinates a roster of role-specific assistants inside a Telegram group. Each role talks directly to AI CLI agents (Qwen Code 0.1.4 or Gemini experimental) via the ACP protocol, keeping long-lived sessions and streaming responses back to the chat.
 
 ## 🎯 MVP Features
 
@@ -27,7 +27,7 @@ User → Group Chat → Listener Bot → NeuroCrew Core → Role Sequence → CL
 - **Listener Bot**: Reads every message in the target group chat
 - **NeuroCrew Core**: Coordinates role-based agents, maintains conversation context, manages stateful sessions
 - **Role Configuration**: YAML-based role definitions in `roles/agents.yaml` with system prompts, CLI commands, and bot tokens
-- **Connector**: `QwenACPConnector` handles ACP protocol communication with Qwen CLI agents
+- **Connector**: `QwenACPConnector` and `GeminiACPConnector` handle ACP protocol communication with Qwen and Gemini CLI agents
 - **Actor Bots**: Role-specific bots that respond under their designated names
 - **File Storage**: Persistent conversation history and session state
 - **Target Chat Filtering**: Ensures operation only in designated Telegram groups
@@ -49,14 +49,29 @@ User → Group Chat → Listener Bot → NeuroCrew Core → Role Sequence → CL
 - Python 3.10+ (the project uses `asyncio` extensively)
 - Node.js 20+ (required by the Qwen CLI)
 - Telegram bot tokens for the listener bot and every actor bot
-- Qwen CLI 0.1.4 authenticated via OAuth
+- AI CLI agent: either Qwen CLI 0.1.4 authenticated via OAuth, or Gemini CLI with API key
 
-Install and authenticate the CLI once:
+Install and authenticate your chosen AI CLI agent:
 
+**For Qwen:**
 ```bash
 npm install -g @qwen-code/qwen-code@0.1.4
 qwen --version          # should print 0.1.4
 qwen                    # run once, choose OAuth in the interactive menu
+```
+
+**For Gemini:**
+```bash
+# Install Gemini CLI (ensure you have Go installed)
+go install github.com/google/gemini-cli@latest
+gemini --version        # verify installation
+
+# Authenticate (choose one method):
+# Method 1: Set API key
+export GEMINI_API_KEY=your_gemini_api_key_here
+
+# Method 2: Configure credentials file
+# Follow Gemini CLI authentication prompts or configure ~/.gemini/settings.json
 ```
 
 ### Setup
@@ -132,7 +147,7 @@ Make sure all bots are added to the same group with the appropriate permissions 
 
 ## 🤖 Supported Roles & Agents
 
-The system supports multiple roles, each powered by **Qwen Code 0.1.4** via ACP protocol:
+The system supports multiple roles, each powered by AI CLI agents (Qwen Code 0.1.4 or Gemini experimental) via ACP protocol:
 
 - **Software Developer**: Code implementation and technical solutions
 - **Code Review**: Quality assurance and code analysis
@@ -168,7 +183,8 @@ ncrew/
 ├── ncrew.py                # Core business logic
 ├── connectors/             # AI agent connectors
 │   ├── base.py             # Shared async process wrapper
-│   └── qwen_acp_connector.py  # Qwen ACP 0.1.4 connector
+│   ├── qwen_acp_connector.py  # Qwen ACP 0.1.4 connector
+│   └── gemini_acp_connector.py  # Gemini ACP experimental connector
 ├── storage/               # Data persistence
 │   └── file_storage.py    # File-based storage
 ├── utils/                 # Utilities
@@ -194,6 +210,66 @@ Enable DEBUG logging during local runs if you need detailed ACP traces:
 LOG_LEVEL=DEBUG python main.py
 ```
 
+## 🔧 Troubleshooting
+
+### Common Issues
+
+#### 1. **Bot Token Issues**
+- **Problem:** `MAIN_BOT_TOKEN не сконфигурирован` or role token not found
+- **Solution:** Ensure all required tokens are set in your `.env` file. Check token format and spelling.
+
+#### 2. **AI CLI Authentication**
+- **Problem:** Agents fail to respond or show authentication errors
+- **Solution:**
+  - **For Qwen:** Run `qwen` command interactively and complete OAuth authentication:
+    ```bash
+    qwen  # Choose OAuth option and follow prompts
+    ```
+  - **For Gemini:** Configure authentication via API key or credentials file:
+    ```bash
+    # Option 1: Set environment variable
+    export GEMINI_API_KEY=your_api_key
+
+    # Option 2: Configure ~/.gemini/settings.json
+    # Run gemini command and follow authentication prompts
+    ```
+
+#### 3. **Target Chat ID Configuration**
+- **Problem:** `TARGET_CHAT_ID не сконфигурирован` or bot doesn't respond in group
+- **Solution:** Verify the chat ID is correct (negative number for groups). Ensure the listener bot is added to the group and privacy mode is disabled.
+
+#### 4. **Role Configuration Errors**
+- **Problem:** `Role-based configuration not enabled` or missing system prompts
+- **Solution:** Check `roles/agents.yaml` exists and is valid YAML. Ensure all system prompt files exist in `roles/prompts/`.
+
+#### 5. **Network Connectivity**
+- **Problem:** `Cannot reach api.telegram.org` or connection timeouts
+- **Solution:** Check internet connectivity. If behind proxy, ensure proxy settings are configured.
+
+#### 6. **Agent Response Timeouts**
+- **Problem:** Agents take too long to respond or timeout
+- **Solution:** Increase `AGENT_TIMEOUT` in environment variables. Check Qwen CLI performance.
+
+#### 7. **Permission Issues**
+- **Problem:** Bots can't send messages in group
+- **Solution:** Ensure actor bots have "Send Messages" permission in the group. Listener bot needs "Read Messages" permission.
+
+### Debug Mode
+
+For detailed troubleshooting, enable debug logging:
+
+```bash
+LOG_LEVEL=DEBUG python main.py
+```
+
+Check logs in `data/logs/ncrew.log` for detailed error information.
+
+### Health Checks
+
+Use these commands in Telegram to diagnose issues:
+- `/status` - Check agent availability
+- `/metrics` - View performance metrics (response times, conversation counts)
+
 ## 📈 MVP Status
 
 ✅ **Completed:**
@@ -211,7 +287,7 @@ LOG_LEVEL=DEBUG python main.py
 - Documentation of operating procedures and troubleshooting
 
 📋 **Planned:**
-- Bring remaining providers onto the ACP stack
+- Additional AI provider connectors (Claude, GPT-4, etc.)
 - Performance tuning and observability
 - Advanced features beyond MVP
 - Enhanced monitoring and logging

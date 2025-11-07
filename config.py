@@ -111,6 +111,7 @@ class RolesRegistry:
                 # Проверяем, что коннектор существует
                 connector_map = {
                     'qwen_acp': 'QwenACPConnector',
+                    'gemini_acp': 'GeminiACPConnector',
                 }
                 if role.agent_type not in connector_map:
                     errors.append(f"Role '{role_name}': Unknown agent_type '{role.agent_type}'")
@@ -149,6 +150,9 @@ class Config:
     AGENT_TIMEOUT: int = int(os.getenv('AGENT_TIMEOUT', '120'))
     LOG_LEVEL: str = os.getenv('LOG_LEVEL', 'INFO').upper()
     DATA_DIR: Path = Path(os.getenv('DATA_DIR', './data'))
+
+    # System Reminder Configuration
+    SYSTEM_REMINDER_INTERVAL: int = int(os.getenv('SYSTEM_REMINDER_INTERVAL', '5'))
 
     # Telegram Configuration
     TELEGRAM_MAX_MESSAGE_LENGTH: int = 4096
@@ -341,6 +345,7 @@ class Config:
             'data_dir': str(cls.DATA_DIR),
             'max_conversation_length': cls.MAX_CONVERSATION_LENGTH,
             'agent_timeout': cls.AGENT_TIMEOUT,
+            'system_reminder_interval': cls.SYSTEM_REMINDER_INTERVAL,
         }
 
         if cls.is_role_based_enabled():
