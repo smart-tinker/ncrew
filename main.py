@@ -1,70 +1,34 @@
+#!/usr/bin/env python3
 """
-Main entry point for NeuroCrew Lab.
+NeuroCrew Lab - Main Entry Point
 
-This module handles application initialization and startup.
+AI agent orchestration platform with role-based architecture.
+Handles application initialization, graceful shutdown, and Telegram bot startup.
 """
 
 import asyncio
 import logging
+import signal
 import sys
-import socket
-import os
-import subprocess
-from pathlib import Path
 from urllib.request import urlopen
 from urllib.error import URLError
-from dotenv import load_dotenv
 
 from config import Config
 from utils.logger import setup_logger
 
+# Initialize logger
+logger = setup_logger("main", Config.LOG_LEVEL)
+
 
 def main():
-    """Main application entry point."""
-    logger = None
+    """Main entry point for the application."""
     try:
-        # Load environment variables from .env file
-        load_dotenv()
+        # Basic configuration
+        logger.info("🚀 Starting NeuroCrew Lab...")
+        logger.info(f"Version: 1.0.0")
+        logger.info(f"Python: {sys.version}")
 
-        # Prevent multiple instances
-        try:
-            existing = subprocess.check_output(["pgrep", "-f", "python main.py"]).decode().strip().splitlines()
-        except subprocess.CalledProcessError:
-            existing = []
-
-        current_pid = os.getpid()
-        other_pids = []
-        for line in existing:
-            parts = line.strip().split()
-            if not parts:
-                continue
-            pid = int(parts[0])
-            cmd = " ".join(parts[1:])
-            if pid != current_pid and "python main.py" in cmd:
-                other_pids.append(pid)
-
-        if other_pids:
-            print("Another instance of NeuroCrew is running. Please stop it before launching.")
-            return
-
-        # Kill stale qwen processes
-        subprocess.run(
-            ["pkill", "-f", "qwen --experimental-acp"],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-
-        # Validate configuration
-        Config.validate()
-
-        # Setup logging
-        log_file = Config.get_data_dir() / 'logs' / 'ncrew.log'
-        logger = setup_logger('ncrew', Config.LOG_LEVEL, log_file)
-        logger.info("Starting NeuroCrew Lab...")
-
-        # Ensure all directories exist
-        Config.ensure_directories()
-        logger.info(f"Data directory: {Config.DATA_DIR}")
+        # Setup directories (handled by FileStorage initialization)
 
         # Log configuration summary
         logger.info(f"Log level: {Config.LOG_LEVEL}")
@@ -95,25 +59,74 @@ def main():
             logger.warning("Role-based configuration not enabled")
             return
 
-        # Initialize and start Telegram bot
-        logger.info("NeuroCrew Lab initialized successfully")
-        logger.info("Starting Telegram bot...")
+        # Run the application with async main
+        asyncio.run(async_main())
 
-        # Import and start bot
-        from telegram_bot import TelegramBot
-        bot = TelegramBot()
-        try:
-            bot.run()
-        except KeyboardInterrupt:
-            logger.info("Application stopped by user")
-        finally:
-            # Graceful shutdown
-            if hasattr(bot, 'shutdown'):
-                import asyncio
-                asyncio.run(bot.shutdown())
     except Exception as e:
         print(f"Failed to start application: {e}")
         sys.exit(1)
+
+
+async def async_main():
+    """Async main function that handles the complete application lifecycle."""
+    # Import and create bot instance
+    from telegram_bot import TelegramBot
+
+    # Create global bot reference for signal handling
+    global bot_instance
+    bot_instance = TelegramBot()
+
+    # Initialize NeuroCrewLab immediately to trigger role filtering
+    logger.info("Initializing NeuroCrewLab instance...")
+    await bot_instance._ensure_ncrew_initialized()
+    logger.info("NeuroCrewLab initialization completed")
+
+    # Graceful shutdown function with timeout
+    async def graceful_shutdown():
+        """Perform graceful shutdown of all components with timeout."""
+        logger.info("Initiating graceful shutdown...")
+
+        try:
+            if hasattr(bot_instance, 'shutdown'):
+                # Add timeout to prevent hanging during shutdown
+                await asyncio.wait_for(bot_instance.shutdown(), timeout=15.0)
+            logger.info("Graceful shutdown completed")
+        except asyncio.TimeoutError:
+            logger.warning("Graceful shutdown timed out, forcing exit")
+        except Exception as e:
+            logger.error(f"Error during graceful shutdown: {e}")
+
+    # Add graceful_shutdown to bot for internal access
+    bot_instance.graceful_shutdown = graceful_shutdown
+
+    try:
+        logger.info("Starting NeuroCrew Lab Telegram bot...")
+        # Use the proper async lifecycle management
+        await bot_instance.application.initialize()
+        await bot_instance.application.start()
+        await bot_instance.application.updater.start_polling(drop_pending_updates=True)
+
+        # Keep the bot running
+        try:
+            # Run indefinitely until interrupted
+            while True:
+                await asyncio.sleep(1)
+        except asyncio.CancelledError:
+            logger.info("Bot operation cancelled")
+
+        # Graceful shutdown
+        await bot_instance.application.updater.stop()
+        await bot_instance.application.stop()
+        await bot_instance.application.shutdown()
+
+    except KeyboardInterrupt:
+        logger.info("Application stopped by user (Ctrl+C)")
+        await graceful_shutdown()
+    except Exception as e:
+        logger.error(f"Unexpected error during bot operation: {e}")
+        await graceful_shutdown()
+        raise
+
 
 if __name__ == '__main__':
     main()

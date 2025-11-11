@@ -77,9 +77,7 @@ class TelegramBot:
         """Ensure NeuroCrew Lab is initialized."""
         if self.ncrew is None:
             self.logger.info("Initializing NeuroCrew Lab...")
-            print("DEBUG: Creating NeuroCrewLab instance...")
             self.ncrew = NeuroCrewLab()
-            print(f"DEBUG: NeuroCrewLab created, roles count = {len(self.ncrew.roles)}")
             await self.ncrew.initialize()
             self.logger.info("NeuroCrew Lab initialized successfully")
 
@@ -523,17 +521,37 @@ class TelegramBot:
             self.logger.info("Bot shutdown complete")
     
     async def shutdown(self):
-        """Gracefully shut down the bot and any associated resources."""
-        self.logger.info("Initiating graceful shutdown...")
+        """Gracefully shut down the bot and any associated resources with reduced logging."""
+        self.logger.info("Shutting down Telegram bot...")
+
         try:
+            # Step 1: Shutdown all role sessions (connectors)
             if self.ncrew:
-                # Shutdown all role sessions (connectors)
-                await self.ncrew.shutdown_role_sessions()
-                self.logger.info("All role sessions shut down")
+                try:
+                    await self.ncrew.shutdown_role_sessions()
+                except Exception as e:
+                    self.logger.debug(f"Error shutting down role sessions: {e}")
+
+            # Step 2: Stop the application
+            try:
+                if hasattr(self.application, 'stop'):
+                    await self.application.stop()
+                elif hasattr(self.application, 'stop_running'):
+                    self.application.stop_running()
+            except Exception as e:
+                self.logger.debug(f"Error stopping application: {e}")
+
+            # Step 3: Final cleanup
+            try:
+                self.ncrew = None
+            except Exception as e:
+                self.logger.debug(f"Error during final cleanup: {e}")
+
         except Exception as e:
-            self.logger.error(f"Error during graceful shutdown: {e}")
+            self.logger.error(f"Critical error during graceful shutdown: {e}")
+
         finally:
-            self.logger.info("Graceful shutdown completed")
+            self.logger.info("Telegram bot shutdown completed")
 
 
 # For development and testing

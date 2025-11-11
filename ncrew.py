@@ -107,12 +107,24 @@ class NeuroCrewLab:
             # Enforce resource availability (command + token)
             enabled_roles = []
             disabled_roles = []
+
             for role in self.roles:
                 missing = []
                 if not role.cli_command or not role.cli_command.strip():
                     missing.append("cli_command")
-                if not Config.TELEGRAM_BOT_TOKENS.get(role.telegram_bot_name):
+                bot_token = Config.TELEGRAM_BOT_TOKENS.get(role.telegram_bot_name)
+
+                if not bot_token:
                     missing.append("bot_token")
+                else:
+                    # Check if token is a placeholder/invalid
+                    placeholder_patterns = [
+                        'your_', 'placeholder', 'token_here', 'bot_token',
+                        'example', 'test_', 'none', 'null', 'undefined'
+                    ]
+                    token_lower = bot_token.lower()
+                    if any(pattern in token_lower for pattern in placeholder_patterns):
+                        missing.append("bot_token")
 
                 if missing:
                     disabled_roles.append((role, missing))
@@ -253,6 +265,16 @@ class NeuroCrewLab:
             bot_token = Config.TELEGRAM_BOT_TOKENS.get(role.telegram_bot_name)
             if not bot_token:
                 self.logger.warning(f"Role {role.role_name}: no bot token configured for {role.telegram_bot_name}")
+                continue
+
+            # Check if token is a placeholder/invalid
+            placeholder_patterns = [
+                'your_', 'placeholder', 'token_here', 'bot_token',
+                'example', 'test_', 'none', 'null', 'undefined'
+            ]
+            token_lower = bot_token.lower()
+            if any(pattern in token_lower for pattern in placeholder_patterns):
+                self.logger.warning(f"Role {role.role_name}: bot token appears to be placeholder for {role.telegram_bot_name}")
                 continue
 
             # Test CLI availability (quick check)
@@ -1100,21 +1122,67 @@ class NeuroCrewLab:
         return connector_class()
 
     async def shutdown_role_sessions(self):
-        """Shutdown all role-based stateful sessions."""
-        self.logger.info("Shutting down role-based sessions")
+        """Gracefully shutdown all role-based stateful sessions with reduced logging."""
+        self.logger.info("Shutting down role sessions...")
 
+        # Set shutdown flag to prevent new operations
         self._shutdown_in_progress = True
 
+        total_sessions = len(self.connector_sessions)
+        if total_sessions == 0:
+            self.logger.info("No active role sessions to shutdown")
+            return
+
+        successful_shutdowns = 0
+
         try:
-            for (chat_id, role_name), connector in list(self.connector_sessions.items()):
+            # Create list of sessions to shutdown (avoid modification during iteration)
+            sessions_to_shutdown = list(self.connector_sessions.items())
+
+            for i, ((chat_id, role_name), connector) in enumerate(sessions_to_shutdown, 1):
                 try:
-                    if hasattr(connector, 'shutdown'):
-                        await connector.shutdown()
-                    self.logger.info(f"Shut down stateful connector for chat {chat_id}, role: {role_name}")
+                    # Check if connector is still alive
+                    if hasattr(connector, 'is_alive') and connector.is_alive():
+                        # Try graceful shutdown with reduced timeout
+                        try:
+                            await asyncio.wait_for(
+                                connector.shutdown(),
+                                timeout=3.0  # Reduced from 10.0
+                            )
+                            successful_shutdowns += 1
+                        except asyncio.TimeoutError:
+                            # Force terminate if timeout - no verbose logging
+                            try:
+                                if hasattr(connector, 'process') and connector.process:
+                                    connector.process.terminate()
+                                    await asyncio.sleep(0.5)  # Reduced wait time
+                                    if connector.process.poll() is None:
+                                        connector.process.kill()
+                            except Exception as e:
+                                self.logger.debug(f"Error during force termination of {role_name}: {str(e)}")
+                    else:
+                        successful_shutdowns += 1
+
                 except Exception as e:
-                    self.logger.error(f"Error shutting down role connector {role_name}: {e}")
+                    self.logger.debug(f"Exception shutting down {role_name}: {str(e)}")
+
+                # Small delay between shutdowns to prevent overwhelming the system
+                if i < len(sessions_to_shutdown):
+                    await asyncio.sleep(0.05)  # Reduced from 0.1
+
+        except Exception as e:
+            self.logger.error(f"Critical error during role sessions shutdown: {e}")
+
         finally:
+            # Clear all session data
             self.connector_sessions.clear()
             self.role_last_seen_index.clear()
             self._shutdown_in_progress = False
-            self.logger.info("All role sessions shut down successfully")
+
+            # Simple summary logging
+            if successful_shutdowns == total_sessions:
+                self.logger.info(f"All {total_sessions} role sessions shut down successfully")
+            else:
+                self.logger.info(f"Role sessions shutdown: {successful_shutdowns}/{total_sessions} successful")
+
+            self.logger.info("=== ROLE SESSIONS GRACEFUL SHUTDOWN COMPLETED ===")

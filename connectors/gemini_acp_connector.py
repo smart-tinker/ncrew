@@ -51,7 +51,9 @@ class GeminiACPConnector(BaseConnector):
         self._conversation_history: List[str] = []
         self.current_session: Optional[_SessionInfo] = None
         # Respect global timeout but never allow less than 5 seconds
-        self.request_timeout: float = max(5.0, float(getattr(Config, "AGENT_TIMEOUT", 120)))
+        self.request_timeout: float = max(30.0, float(getattr(Config, "AGENT_TIMEOUT", 120)))
+        # Deadlock detection configuration
+        self.max_consecutive_timeouts: int = int(getattr(Config, "GEMINI_MAX_TIMEOUTS", 5))
 
     async def launch(self, command: str, system_prompt: str):
         """Launch Gemini CLI and initialize ACP session."""
@@ -100,8 +102,27 @@ class GeminiACPConnector(BaseConnector):
         if self.is_alive() and self.session_id:
             try:
                 await self._send_notification("session/cancel", {"sessionId": self.session_id})
-            except Exception:
-                pass
+                # Give process time to handle the notification
+                await asyncio.sleep(0.1)
+            except Exception as e:
+                self.logger.debug("Error sending session cancel notification: %s", str(e))
+
+        # Terminate process properly with reduced timeout
+        if self.process:
+            try:
+                self.process.terminate()
+                try:
+                    await asyncio.wait_for(self.process.wait(), timeout=1.0)  # Reduced from 3.0
+                except asyncio.TimeoutError:
+                    self.logger.debug("Process did not terminate gracefully, force killing...")  # Reduced verbosity
+                    self.process.kill()
+                    await asyncio.wait_for(self.process.wait(), timeout=1.0)  # Reduced from 2.0
+            except (ProcessLookupError, RuntimeError) as e:
+                # Process might have already terminated or event loop closed
+                self.logger.debug("Process already terminated or event loop closed: %s", str(e))  # Reduced verbosity
+            except Exception as e:
+                self.logger.debug("Error shutting down process: %s", str(e))  # Reduced verbosity
+
         await super().shutdown()
         self.session_id = None
         self.initialized = False
@@ -257,7 +278,9 @@ class GeminiACPConnector(BaseConnector):
                 )
 
                 if not line:
-                    raise RuntimeError("Process closed unexpectedly")
+                    self.logger.warning("Gemini ACP process closed unexpectedly - attempting graceful degradation")
+                    # Return empty response instead of crashing
+                    return {"error": {"code": -1, "message": "Process closed unexpectedly"}, "result": {"text": ""}}
 
                 line_str = line.decode('utf-8').strip()
                 if not line_str:
@@ -275,20 +298,49 @@ class GeminiACPConnector(BaseConnector):
             raise RuntimeError(f"Timeout waiting for Gemini ACP response (>{self.request_timeout}s)")
 
     async def _read_response_with_output(self) -> Tuple[JsonDict, str]:
-        """Read response and collect streaming output."""
+        """Read response and collect streaming output with enhanced deadlock detection."""
         import time
         aggregated_text = ""
         final_response = None
         start_time = time.time()
+        consecutive_timeouts = 0
+        last_activity_time = start_time
 
         while time.time() - start_time < self.request_timeout:
             try:
                 response = await asyncio.wait_for(self._read_response(), timeout=1.0)
+                # Reset timeout counters on successful response
+                consecutive_timeouts = 0
+                last_activity_time = time.time()
             except asyncio.TimeoutError:
-                # No response within 1 second, check if we have enough to proceed
+                consecutive_timeouts += 1
+                time_since_last_activity = time.time() - last_activity_time
+
+                # Enhanced deadlock detection
+                if consecutive_timeouts >= self.max_consecutive_timeouts:
+                    self.logger.error(f"Deadlock detected: {self.max_consecutive_timeouts} consecutive timeouts, forcing abort")
+                    if aggregated_text:
+                        # Return whatever we have collected
+                        final_response = {
+                            "result": {
+                                "text": aggregated_text,
+                                "source": "partial_response_deadlock_recovery",
+                                "final_response": False
+                            }
+                        }
+                        break
+                    else:
+                        raise RuntimeError(f"Subprocess deadlock: No response for {max_consecutive_timeouts} consecutive attempts")
+
+                # Check if we have enough to proceed
                 if final_response is not None:
-                    self.logger.debug("Timeout waiting for more responses, proceeding with available data")
+                    self.logger.debug(f"Timeout waiting for more responses (consecutive: {consecutive_timeouts}), proceeding with available data")
                     break
+
+                # Enhanced logging for debugging
+                if consecutive_timeouts == 2:  # Log on second timeout to reduce spam
+                    self.logger.warning(f"Multiple timeouts detected ({consecutive_timeouts}), last activity: {time_since_last_activity:.1f}s ago")
+
                 continue
 
             # self.logger.debug(f"Received response: {response}")
@@ -300,26 +352,59 @@ class GeminiACPConnector(BaseConnector):
                 session_update_type = update.get("sessionUpdate", "unknown")
                 # self.logger.debug(f"Session update: {session_update_type}")
 
-                if "agentMessageChunk" in params:
-                    chunk_text = params["agentMessageChunk"]
-                    aggregated_text += chunk_text
-                    self.logger.debug(f"Received chunk: {len(chunk_text)} chars")
-                elif session_update_type == "agent_message_chunk":
-                    # Handle new format with nested update structure
-                    content = update.get("content", {})
-                    if content.get("type") == "text":
-                        chunk_text = content.get("text", "")
-                        aggregated_text += chunk_text
-                        # self.logger.debug(f"Received message chunk: '{chunk_text}'")
-                elif "done" in params and params["done"]:
-                    self.logger.debug("Session update indicates completion")
-                    break
-                elif session_update_type == "done":
-                    self.logger.info("Session update indicates completion (new format)")
-                    break
-                elif "error" in params:
-                    self.logger.error(f"Session update error: {params['error']}")
-                    break
+                # Handle agent message chunks with validation
+                try:
+                    if "agentMessageChunk" in params:
+                        chunk_text = params["agentMessageChunk"]
+                        if isinstance(chunk_text, str) and chunk_text.strip():
+                            aggregated_text += chunk_text
+                            self.logger.debug(f"Received legacy format chunk: {len(chunk_text)} chars")
+                        else:
+                            self.logger.warning(f"Invalid agentMessageChunk format: {type(chunk_text)}")
+                    elif session_update_type == "agent_message_chunk":
+                        # Handle new format with nested update structure
+                        content = update.get("content", {})
+                        if isinstance(content, dict):
+                            content_type = content.get("type")
+                            if content_type == "text":
+                                chunk_text = content.get("text", "")
+                                if isinstance(chunk_text, str) and chunk_text.strip():
+                                    aggregated_text += chunk_text
+                                    self.logger.debug(f"Received new format chunk: {len(chunk_text)} chars")
+                                else:
+                                    self.logger.warning(f"Invalid text content in agent_message_chunk: {type(chunk_text)}")
+                            else:
+                                self.logger.warning(f"Unsupported content type in agent_message_chunk: {content_type}")
+                        else:
+                            self.logger.warning(f"Invalid content structure in agent_message_chunk: {type(content)}")
+                    elif "done" in params and params["done"]:
+                        self.logger.debug("Session update indicates completion (legacy format)")
+                        break
+                    elif session_update_type == "done":
+                        self.logger.info("Session update indicates completion (new format)")
+                        break
+                    elif "error" in params:
+                        error_msg = params.get('error', 'Unknown error')
+                        self.logger.error(f"Session update error: {error_msg}")
+                        # Don't break immediately - try to get partial response
+                        if aggregated_text:
+                            self.logger.info("Continuing despite error, using aggregated text")
+                            break
+                        else:
+                            self.logger.warning("No aggregated text available, breaking due to error")
+                            break
+                    else:
+                        # Unknown session update type - log but continue
+                        self.logger.debug(f"Unknown session update type: {session_update_type}")
+                        if session_update_type not in ["unknown"]:
+                            self.logger.debug(f"Session update params: {list(params.keys())}")
+
+                except Exception as e:
+                    self.logger.error(f"Error processing session update: {e}")
+                    # Continue processing if we have aggregated text
+                    if aggregated_text:
+                        self.logger.info("Continuing despite parse error, using aggregated text")
+                        break
 
             # Check if this is the final response to our request
             elif "id" in response and response["id"] == self.message_id:
@@ -330,13 +415,56 @@ class GeminiACPConnector(BaseConnector):
         if final_response is None:
             self.logger.warning("Did not receive final response, but we have aggregated text")
             # In some cases, we might not get a final response but still have the content
-            # Create a dummy final response
-            final_response = {"result": {}}
+            # Create a proper final response with aggregated text
+            if aggregated_text.strip():
+                final_response = {
+                    "result": {
+                        "text": aggregated_text,
+                        "source": "aggregated_chunks",
+                        "final_response": False
+                    }
+                }
+                self.logger.info(f"Using aggregated text as response ({len(aggregated_text)} chars)")
+            else:
+                # No content available - create empty response
+                final_response = {
+                    "result": {
+                        "text": "",
+                        "source": "no_content",
+                        "final_response": False
+                    }
+                }
+                self.logger.warning("No content available, returning empty response")
 
-        # Check for errors
+        # Check for errors with graceful handling
         if final_response and "error" in final_response:
             error = final_response["error"]
-            raise RuntimeError(f"Gemini ACP error: {error.get('message', 'Unknown error')}")
+            error_msg = error.get('message', 'Unknown error')
+
+            # Try to use aggregated text despite the error
+            if aggregated_text.strip():
+                self.logger.error(f"Gemini ACP error occurred, but using aggregated text: {error_msg}")
+                # Create fallback response with aggregated text
+                final_response = {
+                    "result": {
+                        "text": aggregated_text,
+                        "source": "fallback_despite_error",
+                        "final_response": False,
+                        "original_error": error_msg
+                    }
+                }
+                self.logger.info(f"Created fallback response with aggregated text ({len(aggregated_text)} chars)")
+            else:
+                self.logger.error(f"Gemini ACP error occurred with no content available: {error_msg}")
+                # Return empty response with error info
+                final_response = {
+                    "result": {
+                        "text": "",
+                        "source": "error_fallback",
+                        "final_response": False,
+                        "original_error": error_msg
+                    }
+                }
 
         # Check if the result contains the response directly
         if final_response and "result" in final_response:

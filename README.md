@@ -49,15 +49,15 @@ User → Group Chat → Listener Bot → NeuroCrew Core → Role Sequence → CL
 - Python 3.10+ (the project uses `asyncio` extensively)
 - Node.js 20+ (required by the Qwen CLI)
 - Telegram bot tokens for the listener bot and every actor bot
-- AI CLI agent: either Qwen CLI 0.1.4 authenticated via OAuth, or Gemini CLI with API key
+- AI CLI agent: any CLI tool (Qwen CLI, Gemini CLI, Claude Code, etc.) **pre-authenticated by user**
 
-Install and authenticate your chosen AI CLI agent:
+**⚠️ Important:** NeuroCrew Lab does NOT manage AI provider authentication. Users must set up and authenticate CLI tools independently.
 
 **For Qwen:**
 ```bash
 npm install -g @qwen-code/qwen-code@0.1.4
 qwen --version          # should print 0.1.4
-qwen                    # run once, choose OAuth in the interactive menu
+qwen                    # run once, authenticate via OAuth in the interactive menu
 ```
 
 **For Gemini:**
@@ -66,13 +66,14 @@ qwen                    # run once, choose OAuth in the interactive menu
 go install github.com/google/gemini-cli@latest
 gemini --version        # verify installation
 
-# Authenticate (choose one method):
-# Method 1: Set API key
-export GEMINI_API_KEY=your_gemini_api_key_here
-
-# Method 2: Configure credentials file
+# Authenticate using your preferred method:
 # Follow Gemini CLI authentication prompts or configure ~/.gemini/settings.json
+# Note: Do NOT set GEMINI_API_KEY in NeuroCrew Lab environment
 ```
+
+**For other CLI tools:**
+- Install and authenticate according to each tool's documentation
+- Ensure CLI tools work independently before using with NeuroCrew Lab
 
 ### Setup
 
@@ -220,19 +221,18 @@ LOG_LEVEL=DEBUG python main.py
 
 #### 2. **AI CLI Authentication**
 - **Problem:** Agents fail to respond or show authentication errors
-- **Solution:**
+- **Solution:** This is a user responsibility. NeuroCrew Lab does not manage AI authentication.
   - **For Qwen:** Run `qwen` command interactively and complete OAuth authentication:
     ```bash
     qwen  # Choose OAuth option and follow prompts
     ```
-  - **For Gemini:** Configure authentication via API key or credentials file:
+  - **For Gemini:** Configure authentication according to Gemini CLI documentation
     ```bash
-    # Option 1: Set environment variable
-    export GEMINI_API_KEY=your_api_key
-
-    # Option 2: Configure ~/.gemini/settings.json
-    # Run gemini command and follow authentication prompts
+    # Follow Gemini CLI authentication prompts
+    # Note: Do NOT use NeuroCrew Lab environment for API keys
     ```
+  - **For other CLI tools:** Follow each tool's authentication documentation
+  - **Verification:** Test CLI tools independently before using with NeuroCrew Lab
 
 #### 3. **Target Chat ID Configuration**
 - **Problem:** `TARGET_CHAT_ID не сконфигурирован` or bot doesn't respond in group
