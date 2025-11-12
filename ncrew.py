@@ -47,6 +47,7 @@ class NeuroCrewLab:
         self.chat_role_pointers: Dict[int, int] = {}  # chat_id -> role_index
         self.role_last_seen_index: Dict[Tuple[int, str], int] = {}  # {(chat_id, role_name): message_index}
         self.role_response_count: Dict[Tuple[int, str], int] = {}  # {(chat_id, role_name): response_count}
+        self.role_introductions: Dict[str, str] = {} # {role_name: introduction_text}
 
         self._shutdown_in_progress: bool = False
 
@@ -676,6 +677,20 @@ class NeuroCrewLab:
         role_key = (chat_id, role.role_name)
         response_count = self.role_response_count.get(role_key, 0)
 
+        # On the very first turn for a role in a chat, provide team context
+        if response_count == 0 and self.role_introductions:
+            other_introductions = [
+                f"- {r.display_name}: {self.role_introductions.get(r.role_name, 'N/A')}"
+                for r in self.roles if r.role_name != role.role_name
+            ]
+            team_context = (
+                "--- TEAM CONTEXT ---\n"
+                "You are part of a team. Here are the other members:\n"
+                + "\n".join(other_introductions)
+                + "\n--- END TEAM CONTEXT ---\n\n"
+            )
+            conversation_context = team_context + conversation_context
+
         if response_count > 0 and response_count % Config.SYSTEM_REMINDER_INTERVAL == 0:
             # Add system reminder
             system_reminder = f"\n\n--- SYSTEM REMINDER ---\n{role.system_prompt}\n--- END REMINDER ---\n\n"
@@ -1111,6 +1126,66 @@ class NeuroCrewLab:
 
         # Create connector with pure stateful interface
         return connector_class()
+
+    async def perform_startup_introductions(self, bot: 'Bot'):
+        """
+        Performs a startup introduction sequence for all active roles.
+        This resets each agent's context by creating a new session,
+        asking for an introduction, storing it, and then shutting down.
+        """
+        self.logger.info("=== STARTING AGENT INTRODUCTION SEQUENCE ===")
+        self.role_introductions.clear() # Ensure clean state on every start
+        introduction_prompt = "Hello! Please introduce yourself and briefly describe your role and capabilities."
+        SYSTEM_CHAT_ID = 0  # A virtual chat_id for this system-level process
+
+        for role in self.roles:
+            self.logger.info(f"Introducing role: {role.role_name}...")
+            connector = None
+            try:
+                # 1. Create a new session for the agent to reset its context
+                connector = self._get_or_create_role_connector(SYSTEM_CHAT_ID, role)
+
+                # If the connector was somehow already alive, shut it down first for a clean start
+                if connector.is_alive():
+                    await connector.shutdown()
+
+                # 2. Launch the agent and send its system prompt
+                await connector.launch(role.cli_command, role.system_prompt)
+                self.logger.info(f"Launched {role.role_name} for introduction.")
+
+                # 3. Send the introduction request and store the response
+                response = await connector.execute(introduction_prompt)
+                introduction_text = response.strip()
+                self.role_introductions[role.role_name] = introduction_text
+                self.logger.info(f"Introduction from {role.role_name}: {introduction_text}")
+
+            except Exception as e:
+                self.logger.error(f"Failed to get introduction from {role.role_name}: {e}")
+                self.role_introductions[role.role_name] = f"Error: Could not get introduction from {role.display_name}."
+            finally:
+                # 4. Shut down the temporary session to ensure a clean state
+                if connector:
+                    await connector.shutdown()
+                    # Remove the temporary session from the dictionary
+                    key = (SYSTEM_CHAT_ID, role.role_name)
+                    if key in self.connector_sessions:
+                        del self.connector_sessions[key]
+                self.logger.info(f"Session for {role.role_name} closed after introduction.")
+
+        self.logger.info("=== AGENT INTRODUCTION SEQUENCE COMPLETE ===")
+
+        # 5. Notify the main chat that the team is ready
+        try:
+            if Config.TARGET_CHAT_ID:
+                await bot.send_message(
+                    chat_id=Config.TARGET_CHAT_ID,
+                    text="💬 Команда готова к работе. Жду ваших указаний."
+                )
+                self.logger.info(f"Sent 'ready' message to chat ID {Config.TARGET_CHAT_ID}.")
+            else:
+                self.logger.warning("No TARGET_CHAT_ID configured. Cannot send 'ready' message.")
+        except Exception as e:
+            self.logger.error(f"Failed to send 'ready' message to Telegram: {e}")
 
     async def shutdown_role_sessions(self):
         """Gracefully shutdown all role-based stateful sessions with reduced logging."""
