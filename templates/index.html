@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NeuroCrew Lab - Settings</title>
+    <style>
+        body { font-family: sans-serif; }
+        .container { max-width: 800px; margin: 0 auto; padding: 20px; }
+        .role { border: 1px solid #ccc; padding: 10px; margin-bottom: 10px; cursor: move; }
+        .role-header { display: flex; justify-content: space-between; align-items: center; }
+        .role-body { margin-top: 10px; }
+        .form-group { margin-bottom: 10px; }
+        label { display: block; margin-bottom: 5px; }
+        input, textarea { width: 100%; padding: 8px; box-sizing: border-box; }
+        .btn { padding: 10px 15px; border: none; background-color: #007bff; color: white; cursor: pointer; }
+        .btn-danger { background-color: #dc3545; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>NeuroCrew Lab - Settings</h1>
+        <form action="/save" method="post" id="roles-form">
+            <div id="roles-container">
+                {% for role in roles %}
+                <div class="role" data-id="{{ loop.index0 }}">
+                    <div class="role-header">
+                        <h3 class="role-name">{{ role.role_name }}</h3>
+                        <button type="button" class="btn btn-danger" onclick="removeRole(this)">Remove</button>
+                    </div>
+                    <div class="role-body">
+                        <input type="hidden" name="role_name" value="{{ role.role_name }}">
+                        <div class="form-group">
+                            <label>Display Name</label>
+                            <input type="text" name="display_name" value="{{ role.display_name }}">
+                        </div>
+                        <div class="form-group">
+                            <label>System Prompt File</label>
+                            <input type="text" name="system_prompt_file" value="{{ role.system_prompt_file }}">
+                        </div>
+                        <div class="form-group">
+                            <label>Agent Type</label>
+                            <input type="text" name="agent_type" value="{{ role.agent_type }}">
+                        </div>
+                        <div class="form-group">
+                            <label>CLI Command</label>
+                            <input type="text" name="cli_command" value="{{ role.cli_command }}">
+                        </div>
+                        <div class="form-group">
+                            <label>Description</label>
+                            <textarea name="description">{{ role.description }}</textarea>
+                        </div>
+                        <div class="form-group">
+                            <label>Telegram Bot Token</label>
+                            <input type="text" name="telegram_bot_token" value="{{ role.telegram_bot_token }}">
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            <button type="button" class="btn" onclick="addRole()">Add Role</button>
+            <button type="submit" class="btn">Save & Reload</button>
+        </form>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+    <script>
+        const rolesContainer = document.getElementById('roles-container');
+        let sortable = new Sortable(rolesContainer, {
+            animation: 150,
+            ghostClass: 'blue-background-class'
+        });
+
+        function addRole() {
+            const roleName = prompt('Enter a unique role name:');
+            if (roleName && !document.querySelector(`[name="role_name"][value="${roleName}"]`)) {
+                const newRole = document.createElement('div');
+                newRole.className = 'role';
+                newRole.innerHTML = `
+                    <div class="role-header">
+                        <h3 class="role-name">${roleName}</h3>
+                        <button type="button" class="btn btn-danger" onclick="removeRole(this)">Remove</button>
+                    </div>
+                    <div class="role-body">
+                        <input type="hidden" name="role_name" value="${roleName}">
+                        <div class="form-group">
+                            <label>Display Name</label>
+                            <input type="text" name="display_name" value="">
+                        </div>
+                        <div class="form-group">
+                            <label>System Prompt File</label>
+                            <input type="text" name="system_prompt_file" value="">
+                        </div>
+                        <div class="form-group">
+                            <label>Agent Type</label>
+                            <input type="text" name="agent_type" value="">
+                        </div>
+                        <div class="form-group">
+                            <label>CLI Command</label>
+                            <input type="text" name="cli_command" value="">
+                        </div>
+                        <div class="form-group">
+                            <label>Description</label>
+                            <textarea name="description"></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label>Telegram Bot Token</label>
+                            <input type="text" name="telegram_bot_token" value="">
+                        </div>
+                    </div>
+                `;
+                rolesContainer.appendChild(newRole);
+            } else if (roleName) {
+                alert('Role name must be unique.');
+            }
+        }
+
+        function removeRole(button) {
+            if (confirm('Are you sure you want to remove this role?')) {
+                button.closest('.role').remove();
+            }
+        }
+
+        document.getElementById('roles-form').addEventListener('submit', function(e) {
+            const roleNames = new Set();
+            let hasDuplicates = false;
+            document.querySelectorAll('[name="role_name"]').forEach(input => {
+                if (roleNames.has(input.value)) {
+                    hasDuplicates = true;
+                }
+                roleNames.add(input.value);
+            });
+
+            if (hasDuplicates) {
+                e.preventDefault();
+                alert('Role names must be unique.');
+            }
+        });
+
+    </script>
+
+</body>
+</html>
