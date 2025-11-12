@@ -1,5 +1,6 @@
 from functools import wraps
 import os
+import re
 import yaml
 from flask import Flask, Response, render_template, request, redirect, url_for
 from dotenv import load_dotenv, find_dotenv, set_key
@@ -7,6 +8,16 @@ from dotenv import load_dotenv, find_dotenv, set_key
 load_dotenv()
 
 app = Flask(__name__)
+
+
+def _sanitize_bot_name(raw_value: str, fallback: str) -> str:
+    """Normalize bot name to contain only alphanumerics/underscores."""
+    candidate = (raw_value or "").strip() or fallback
+    candidate = re.sub(r"[^A-Za-z0-9_]+", "_", candidate)
+    candidate = re.sub(r"_+", "_", candidate).strip("_")
+    if not candidate:
+        candidate = fallback.strip().upper().replace("-", "_")
+    return candidate or "ROLE_BOT"
 
 # --- Auth ---
 def check_auth(username, password):
@@ -73,19 +84,30 @@ def index():
 @requires_auth
 def save():
     roles = []
-    for i in range(len(request.form.getlist('role_name'))):
-        role_name = request.form.getlist('role_name')[i]
-        telegram_bot_name = f"{role_name.upper()}_BOT"
+    role_names = request.form.getlist('role_name')
+    display_names = request.form.getlist('display_name')
+    bot_names = request.form.getlist('telegram_bot_name')
+    prompt_files = request.form.getlist('system_prompt_file')
+    agent_types = request.form.getlist('agent_type')
+    cli_commands = request.form.getlist('cli_command')
+    descriptions = request.form.getlist('description')
+    bot_tokens = request.form.getlist('telegram_bot_token')
+
+    total_roles = len(role_names)
+
+    for i in range(total_roles):
+        role_name = role_names[i]
+        telegram_bot_name = _sanitize_bot_name(bot_names[i] if i < len(bot_names) else "", role_name)
 
         role = {
             'role_name': role_name,
-            'display_name': request.form.getlist('display_name')[i],
+            'display_name': display_names[i] if i < len(display_names) else "",
             'telegram_bot_name': telegram_bot_name,
-            'system_prompt_file': request.form.getlist('system_prompt_file')[i],
-            'agent_type': request.form.getlist('agent_type')[i],
-            'cli_command': request.form.getlist('cli_command')[i],
-            'description': request.form.getlist('description')[i],
-            'telegram_bot_token': request.form.getlist('telegram_bot_token')[i]
+            'system_prompt_file': prompt_files[i] if i < len(prompt_files) else "",
+            'agent_type': agent_types[i] if i < len(agent_types) else "",
+            'cli_command': cli_commands[i] if i < len(cli_commands) else "",
+            'description': descriptions[i] if i < len(descriptions) else "",
+            'telegram_bot_token': bot_tokens[i] if i < len(bot_tokens) else ""
         }
         roles.append(role)
 

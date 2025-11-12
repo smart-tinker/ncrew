@@ -33,6 +33,13 @@
 User → Telegram Group → Listener Bot → NeuroCrew Core → Role Sequence → CLI Agents → Actor Bots → Group Chat
 ```
 
+#### **🕸️ Web-конфигуратор ролей**
+```
+web_server.py        - Flask-сервис с Basic Auth (WEB_ADMIN_USER/PASS)
+templates/index.html - Форма редактирования ролей, prompt-файлов и токенов
+.reload              - Флаг, создаваемый после сохранения для инициирования перезапуска
+```
+
 ### **Основные компоненты**
 
 #### **🤖 Core Application**
@@ -58,30 +65,22 @@ telegram_bot.py (Interface)
 #### **🔌 AI Интеграции (Расширяемая архитектура)**
 ```
 connectors/
-├── base.py - Abstract connector class
-│   ├── Unified interface for all AI providers
-│   ├── Common functionality (deadlock detection, timeouts)
-│   └── CLI-first communication layer (no API keys stored)
-├── gemini_acp_connector.py - Gemini CLI integration
-│   ├── Enhanced deadlock detection
-│   ├── Streaming response handling
-│   └── Timeout optimization
-├── qwen_acp_connector.py - Qwen CLI integration
-│   ├── Stateful sessions
-│   └── Bidirectional communication
-└── [future connectors] - Extensible architecture for any AI provider
-    ├── claude_code_connector.py (planned)
-    ├── github_copilot_connector.py (planned)
-    ├── local_llm_connector.py (planned)
-    └── custom_cli_connector.py (planned)
+├── base.py              - Базовый класс для ACP-процессов
+├── base_sdk_connector.py - Общая логика для SDK-провайдеров (OpenAI, Anthropic)
+├── opencode_acp_connector.py - OpenCode CLI via ACP
+├── qwen_acp_connector.py     - Qwen CLI via ACP
+├── gemini_acp_connector.py   - Gemini CLI via ACP
+├── openai_sdk_connector.py   - OpenAI Python SDK
+├── anthropic_sdk_connector.py- Anthropic Python SDK
+└── [future connectors]       - Расширение для других CLI/API
 ```
 
 **🔒 Архитектурные принципы:**
-- 🔌 **CLI-first approach** - Работаем только с предварительно аутентифицированными CLI
-- ❌ **Zero API key storage** - Не храним ключи AI провайдеров
-- 🎯 **Единый интерфейс** - Все коннекторы следуют одному API
-- ⚡ **User-controlled auth** - Пользователь отвечает за авторизацию CLI
-- 🚀 **Protocol-agnostic** - Поддержка любых CLI интерфейсов
+- 🔌 **CLI + SDK parity** — ACP-коннекторы держат процессы, SDK-коннекторы обращаются к API без хранения ключей в проекте.
+- ❌ **Zero API key storage** — ключи задаются в окружении пользователя (не в `.env` репозитория).
+- 🎯 **Единый интерфейс** — все коннекторы наследуются от базовых классов и имеют одинаковые методы `launch/execute`.
+- ⚡ **User-controlled auth** — ответственность за авторизацию CLI и SDK лежит на операторе.
+- 🚀 **Protocol-agnostic** — добавление новых провайдеров требует только реализации соответствующего коннектора.
 
 #### **🤖 Ролевая система (10 ролей)**
 ```

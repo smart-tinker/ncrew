@@ -12,6 +12,8 @@ from pathlib import Path
 from dotenv import load_dotenv
 from dataclasses import dataclass, field
 
+from connectors import get_connector_spec
+
 # Load environment variables from .env file
 load_dotenv()
 
@@ -36,6 +38,7 @@ class RoleConfig:
 
     def __post_init__(self):
         """Валидация и пост-обработка после инициализации."""
+        connector_spec = get_connector_spec(self.agent_type)
         # Валидация обязательных полей
         if not self.role_name:
             raise ValueError("role_name is required")
@@ -43,7 +46,7 @@ class RoleConfig:
             raise ValueError("telegram_bot_name is required")
         if not self.agent_type:
             raise ValueError("agent_type is required")
-        if not self.cli_command:
+        if (not self.cli_command) and (not connector_spec or connector_spec.requires_cli):
             raise ValueError("cli_command is required")
 
         # Преобразование строки в Path для системного промпта
@@ -96,6 +99,7 @@ class RolesRegistry:
         errors = []
 
         for role_name, role in self.roles.items():
+            connector_spec = get_connector_spec(role.agent_type)
             # Проверяем наличие файла системного промпта
             if role.system_prompt_path and not role.system_prompt_path.exists():
                 errors.append(f"Role '{role_name}': System prompt file not found: {role.system_prompt_path}")
@@ -107,17 +111,12 @@ class RolesRegistry:
             # Проверяем agent_type
             if not role.agent_type:
                 errors.append(f"Role '{role_name}': agent_type is missing")
-            else:
-                # Проверяем, что коннектор существует
-                connector_map = {
-                    'qwen_acp': 'QwenACPConnector',
-                    'gemini_acp': 'GeminiACPConnector',
-                }
-                if role.agent_type not in connector_map:
-                    errors.append(f"Role '{role_name}': Unknown agent_type '{role.agent_type}'")
+            elif not connector_spec:
+                errors.append(f"Role '{role_name}': Unknown agent_type '{role.agent_type}'")
 
             # Проверяем cli_command
-            if not role.cli_command or not role.cli_command.strip():
+            requires_cli = connector_spec.requires_cli if connector_spec else True
+            if requires_cli and (not role.cli_command or not role.cli_command.strip()):
                 errors.append(f"Role '{role_name}': cli_command is missing or empty")
 
         return errors

@@ -36,21 +36,25 @@
                         </div>
                         <div class="form-group">
                             <label>System Prompt File</label>
-                            <input type="text" name="system_prompt_file" value="{{ role.system_prompt_file }}">
-                        </div>
-                        <div class="form-group">
-                            <label>Agent Type</label>
-                            <input type="text" name="agent_type" value="{{ role.agent_type }}">
-                        </div>
-                        <div class="form-group">
-                            <label>CLI Command</label>
-                            <input type="text" name="cli_command" value="{{ role.cli_command }}">
-                        </div>
-                        <div class="form-group">
-                            <label>Description</label>
-                            <textarea name="description">{{ role.description }}</textarea>
-                        </div>
-                        <div class="form-group">
+                        <input type="text" name="system_prompt_file" value="{{ role.system_prompt_file }}">
+                    </div>
+                    <div class="form-group">
+                        <label>Agent Type</label>
+                        <input type="text" name="agent_type" value="{{ role.agent_type }}">
+                    </div>
+                    <div class="form-group">
+                        <label>CLI Command</label>
+                        <input type="text" name="cli_command" value="{{ role.cli_command }}">
+                    </div>
+                    <div class="form-group">
+                        <label>Telegram Bot Name</label>
+                        <input type="text" name="telegram_bot_name" value="{{ role.telegram_bot_name }}" placeholder="Software_Dev_Bot">
+                    </div>
+                    <div class="form-group">
+                        <label>Description</label>
+                        <textarea name="description">{{ role.description }}</textarea>
+                    </div>
+                    <div class="form-group">
                             <label>Telegram Bot Token</label>
                             <input type="text" name="telegram_bot_token" value="{{ role.telegram_bot_token }}">
                         </div>
@@ -71,9 +75,24 @@
             ghostClass: 'blue-background-class'
         });
 
+        function generateBotName(roleName) {
+            if (!roleName) return 'New_Role_Bot';
+            let normalized = roleName.trim().replace(/[^A-Za-z0-9_]+/g, '_');
+            normalized = normalized.replace(/_+/g, '_').replace(/^_|_$/g, '');
+            if (!normalized) {
+                normalized = 'New_Role';
+            }
+            if (!/_bot$/i.test(normalized)) {
+                normalized = normalized + '_Bot';
+            }
+            return normalized;
+        }
+
         function addRole() {
             const roleName = prompt('Enter a unique role name:');
             if (roleName && !document.querySelector(`[name="role_name"][value="${roleName}"]`)) {
+                const suggestedBotName = generateBotName(roleName);
+                const botName = prompt('Enter Telegram bot name (used for *_TOKEN variables):', suggestedBotName) || suggestedBotName;
                 const newRole = document.createElement('div');
                 newRole.className = 'role';
                 newRole.innerHTML = `
@@ -98,6 +117,10 @@
                         <div class="form-group">
                             <label>CLI Command</label>
                             <input type="text" name="cli_command" value="">
+                        </div>
+                        <div class="form-group">
+                            <label>Telegram Bot Name</label>
+                            <input type="text" name="telegram_bot_name" value="${botName}">
                         </div>
                         <div class="form-group">
                             <label>Description</label>

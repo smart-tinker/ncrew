@@ -1,439 +1,220 @@
 # NeuroCrew Lab
 
-🚀 **Telegram-based orchestration platform for autonomous AI coding agents**
+🚀 **Telegram-платформа для оркестрации автономных AI-агентов**
 
-NeuroCrew Lab coordinates a roster of role-specific assistants inside a Telegram group. Each role is powered by an AI model, accessed through one of two methods:
+NeuroCrew Lab управляет цепочкой специализированных ролей внутри одного Telegram-чата. Каждая роль подключается к своему AI-инструменту двумя способами:
 
-1.  **ACP Connectors**: For CLI-based agents like OpenCode, Qwen, and Gemini, the platform uses the Agent Communication Protocol (ACP) to maintain long-lived, stateful sessions.
-2.  **SDK Connectors**: For direct API access to providers like OpenAI and Anthropic, the platform uses official Python SDKs to manage conversations.
+1. **ACP-коннекторы** — для CLI-агентов (OpenCode, Qwen, Gemini) используется Agent Communication Protocol, который поддерживает долгоживущие интерактивные сессии.
+2. **SDK-коннекторы** — для прямых API-провайдеров (OpenAI, Anthropic) применяются официальные Python SDK с управлением диалогами и ключами в окружении пользователя.
 
-## 🎯 MVP Features
+Платформа совмещает Puppet Master-архитектуру в Telegram и лёгкое файловое хранилище, сохраняя простоту MVP.
 
-- **Telegram Bot Interface**: Simple chat-based interaction
-- **Multi-Agent Orchestration**: Sequential processing through multiple AI agents
-- **Context Management**: Maintains conversation history and context
-- **File-based Storage**: Persistent conversation history
-- **Error Handling**: Graceful error recovery and logging
+## 🎯 Возможности MVP
 
-## 🏗️ Architecture
+- **Listener Bot**: один бот-слушатель принимает сообщения только из `TARGET_CHAT_ID`.
+- **Оркестрация ролей**: последовательный проход по ролям (разработчик, ревьюер, архитектор и т.д.) до тех пор, пока все не вернут `.....`.
+- **Два класса коннекторов**: ACP (`OpenCodeACPConnector`, `QwenACPConnector`, `GeminiACPConnector`) и SDK (`OpenAISDKConnector`, `AnthropicSDKConnector`).
+- **Файловое хранилище**: история диалогов в `data/conversations` + метаданные и бэкапы.
+- **Боты-актеры**: ответы отправляются из отдельных Telegram-ботов для каждой роли.
+- **Веб-интерфейс конфигурации**: минимальная панель (`web_server.py` + `templates/index.html`) для редактирования ролей и токенов.
+- **Команды обслуживания**: `/start`, `/help`, `/reset`, `/status`, `/metrics`, `/agents`, `/next`, `/about`.
 
-### Role-Based Puppet Master Architecture
-
-NeuroCrew Lab uses a **role-based orchestration system** where each AI agent represents a specific role (Software Developer, Code Review, Architect, etc.). The system maintains collaborative discussions between roles until consensus is reached.
+## 🏗️ Архитектура Puppet Master
 
 ```
-User → Group Chat → Listener Bot → NeuroCrew Core → Role Sequence → CLI Agents → Actor Bots → Group Chat
+Пользователь → Telegram-группа → Listener Bot → NeuroCrew Core → Цепочка ролей
+                                                   ↓
+                     ACP-коннекторы (OpenCode/Qwen/Gemini) и SDK-коннекторы (OpenAI/Anthropic)
+                                                   ↓
+                                 Actor Bots → Telegram-группа
 ```
 
-### Components
+### Основные компоненты
 
-- **Listener Bot**: Reads every message in the target group chat
-- **NeuroCrew Core**: Coordinates role-based agents, maintains conversation context, manages stateful sessions
-- **Role Configuration**: YAML-based role definitions in `roles/agents.yaml` with system prompts, CLI commands, and bot tokens
-- **Connectors**:
-    - **ACP Connectors**: `OpenCodeACPConnector`, `QwenACPConnector`, and `GeminiACPConnector` manage subprocesses for CLI-based agents.
-    - **SDK Connectors**: `OpenAISDKConnector` and `AnthropicSDKConnector` interact directly with APIs.
-- **Actor Bots**: Role-specific bots that respond under their designated names
-- **File Storage**: Persistent conversation history and session state
-- **Target Chat Filtering**: Ensures operation only in designated Telegram groups
+- **`telegram_bot.py`** — обрабатывает входящие сообщения, команды и рассылает ответы через бот-актёров.
+- **`ncrew.py`** — ведёт очередь ролей, создаёт/повторно использует коннекторы, считает метрики, сохраняет сообщения в хранилище.
+- **`connectors/`**  
+  - `base.py` — базовый интерфейс для ACP-коннекторов.  
+  - `base_sdk_connector.py` — общая логика для SDK-агентов.  
+  - `opencode_acp_connector.py`, `qwen_acp_connector.py`, `gemini_acp_connector.py` — работа с CLI по ACP.  
+  - `openai_sdk_connector.py`, `anthropic_sdk_connector.py` — прямой вызов API с использованием ключей в окружении пользователя.
+- **`storage/file_storage.py`** — асинхронное сохранение истории, резервное копирование повреждённых файлов.
+- **`config.py` + `roles/agents.yaml`** — описание ролей, загрузка токенов `{TELEGRAM_BOT_NAME}_TOKEN`, валидация настроек.
+- **`web_server.py`** — Flask-приложение с Basic Auth (`WEB_ADMIN_USER` / `WEB_ADMIN_PASS`) для правки ролей и токенов через браузер.
+- **`templates/index.html`** — форма редактирования ролей (имя, prompt-файл, `agent_type`, `cli_command`, токены).
 
-### Workflow
+### Поток обработки
 
-1. **User sends message** in the target group chat
-2. **Listener Bot** reads the message (only works in TARGET_CHAT_ID)
-3. **NeuroCrew Core** processes message and selects agent
-4. **CLI Agent** generates response via connector
-5. **Core returns** (agent_name, raw_response) tuple
-6. **Actor Bot** sends formatted response from its own account
-7. **Conversation history** is maintained in files
+1. Listener Bot принимает сообщение, проверяет чат и безопасность (`utils.security`).
+2. `FileStorage` сохраняет запись и обновляет счётчики.
+3. `NeuroCrewLab.handle_message` запускает цикл ролей (round-robin). Для каждой роли:
+   - Формирует промпт из новых сообщений.
+   - Обеспечивает активность коннектора (ACP-процесс или SDK-сессию).
+   - Выполняет до двух ретраев при ошибках.
+   - Сохраняет ответ в истории.
+4. TelegramBot форматирует ответ и отправляет его через соответствующего актёра (или listener-бота при отсутствии токена).
+5. `/reset` или остановка вызывают `shutdown_role_sessions`, закрывая все subprocess для чата.
 
-## 📦 Installation
+## 📦 Установка и настройка
 
-### Prerequisites
+### Предварительные требования
 
-- Python 3.10+ (the project uses `asyncio` extensively)
-- Node.js 20+ (required by the Qwen CLI)
-- Telegram bot tokens for the listener bot and every actor bot
-- **For ACP-based agents**: A pre-authenticated CLI tool (OpenCode, Qwen CLI, Gemini CLI, etc.).
-- **For SDK-based agents**: API keys for the desired services (OpenAI, Anthropic), configured as environment variables.
+- Python 3.10+
+- Node.js 20+ (для Qwen/OpenCode CLI)
+- Go 1.21+ (для Gemini CLI)
+- Telegram-токены для бота-слушателя и каждого актёра
+- Преднастроенные AI-инструменты:  
+  - CLI: OpenCode, Qwen, Gemini (авторизованы в пользовательском окружении).  
+  - SDK: `OPENAI_API_KEY`, `ANTHROPIC_API_KEY` заданы в `~/.bashrc` / `~/.zshrc` (не в `.env` проекта).
 
-**⚠️ Important:** NeuroCrew Lab does NOT manage AI provider authentication. For both CLI and SDK agents, authentication must be configured in the user's environment, not in the project's `.env` file.
+### SDK-агенты (пример)
 
-### SDK Configuration
-
-For direct API access, ensure the following environment variables are set in your shell configuration (`~/.bashrc`, `~/.zshrc`, etc.):
-
-```sh
-export OPENAI_API_KEY="your_openai_api_key"
-export ANTHROPIC_API_KEY="your_anthropic_api_key"
-```
-
-The application's SDK connectors will automatically detect and use these variables.
-
-### CLI Agent Configuration
-
-**For OpenCode:**
 ```bash
-# Easiest way via install script
+echo 'export OPENAI_API_KEY="sk-...your-key..."' >> ~/.zshrc
+echo 'export ANTHROPIC_API_KEY="anthropic-key"' >> ~/.zshrc
+source ~/.zshrc
+```
+
+Коннекторы автоматически читают эти переменные через `os.environ`.
+
+### CLI-агенты
+
+**OpenCode**
+```bash
 curl -fsSL https://opencode.ai/install | bash
-
-# Or via npm/bun
+# либо
 npm i -g opencode-ai@latest
-
-# Authenticate by running opencode and following the prompts
 opencode auth login
 ```
 
-**For Qwen:**
+**Qwen**
 ```bash
 npm install -g @qwen-code/qwen-code@0.1.4
-qwen --version          # should print 0.1.4
-qwen                    # run once, authenticate via OAuth in the interactive menu
+qwen --version
+qwen   # пройти OAuth
 ```
 
-**For Gemini:**
+**Gemini**
 ```bash
-# Install Gemini CLI (ensure you have Go installed)
 go install github.com/google/gemini-cli@latest
-gemini --version        # verify installation
-
-# Authenticate using your preferred method. The recommended way is to configure
-# your API key in the dedicated settings file: ~/.gemini/settings.json
-#
-# ⚠️ Security Warning: Do NOT set the GEMINI_API_KEY environment variable in the
-# `.env` file of this project. The CLI should be pre-authenticated in your
-# global user environment, not within the application's environment.
+gemini --version
+# Настроить ~/.gemini/settings.json, не прописывать GEMINI_API_KEY в .env проекта
 ```
 
-**For other CLI tools:**
-- Install and authenticate according to each tool's documentation
-- Ensure CLI tools work independently before using with NeuroCrew Lab
+Другие CLI настраиваются по документации провайдера и должны успешно работать вне NeuroCrew.
 
-### Setup
+### Настройка проекта
 
-1. **Clone the repository**
+1. **Клонирование**
    ```bash
-   git clone <repository-url>
+   git clone <repo-url>
    cd ncrew
    ```
-
-2. **Install dependencies**
+2. **Зависимости**
    ```bash
    pip install -r requirements.txt
    ```
-
-3. **Configure environment**
+3. **.env**
    ```bash
    cp .env.example .env
-   # Edit .env with your configuration
+   # заполнить MAIN_BOT_TOKEN, TARGET_CHAT_ID, {ROLE}_BOT_TOKEN, WEB_ADMIN_USER/PASS
    ```
-
-4. **Run the application**
+4. **Запуск бота**
    ```bash
    python main.py
+   # или ./ncrew.sh для автоматической подготовки .venv
    ```
+5. **Веб-панель ролей**
+   - `python main.py` автоматически запускает Flask-панель на порту 8080 в отдельном потоке.
+   - Для отдельной от бота работы можно вручную запустить `python web_server.py` (Basic Auth остаётся той же).
 
-## ⚙️ Configuration
+### Настройка Telegram-среды
 
-### Role Configuration
+1. Создайте **N+1 ботов** через `@BotFather`: один Listener и отдельный бот под каждую роль из `roles/agents.yaml`.  
+2. Создайте Telegram-группу, добавьте туда всех ботов и участников.  
+3. Отключите **privacy mode** для Listener-бота (`/mybots → Bot Settings → Group Privacy → Turn off`).  
+4. Узнайте `TARGET_CHAT_ID` (например, через `@userinfobot`) и сохраните токены в `.env`.  
+Без этих шагов Bot не сможет читать сообщения и отправлять ответы.
 
-Roles are defined in `roles/agents.yaml`. Each role specifies:
-- `role_name`: Unique identifier
-- `display_name`: Human-readable name
-- `telegram_bot_name`: Bot identifier for token lookup
-- `system_prompt_file`: Path to role's system prompt
-- `agent_type`: Connector type (currently "qwen_acp")
-- `cli_command`: Command to launch the agent
+## ⚙️ Конфигурация
 
-### Веб-интерфейс для Управления Ролями
+- `MAIN_BOT_TOKEN`, `TARGET_CHAT_ID` — обязательные.  
+- `{TELEGRAM_BOT_NAME}_TOKEN` — автоматически подхватываются из `.env` на основе `roles/agents.yaml`.  
+- `MAX_CONVERSATION_LENGTH`, `AGENT_TIMEOUT`, `LOG_LEVEL`, `DATA_DIR` — общесистемные параметры.  
+- `GEMINI_MAX_TIMEOUTS`, `SYSTEM_REMINDER_INTERVAL` — настройки коннекторов.  
+- `WEB_ADMIN_USER`, `WEB_ADMIN_PASS` — логин/пароль для веб-панели.
 
-Для упрощения настройки, в NeuroCrew Lab встроен веб-интерфейс, который позволяет управлять ролями без прямого редактирования конфигурационных файлов.
-
-**1. Доступ к интерфейсу:**
-
-После запуска приложения, веб-интерфейс будет доступен по адресу `http://localhost:8080`.
-
-**2. Настройка Аутентификации:**
-
-Доступ к панели защищен базовой HTTP-аутентификацией. Чтобы задать имя пользователя и пароль, добавьте следующие переменные в ваш `.env` файл:
-
-```env
-WEB_ADMIN_USER=admin
-WEB_ADMIN_PASS=ваш_супер_сложный_пароль
-```
-
-**3. Управление Ролями:**
-
-В веб-интерфейсе вы можете:
-- **Изменять порядок ролей:** Просто перетащите роль в нужное место списка. Порядок определяет последовательность их вызова.
-- **Редактировать роли:** Нажмите на роль, чтобы развернуть ее настройки. Вы можете изменить имя, системный промпт, команду запуска и другие параметры.
-- **Добавлять и удалять роли:** Используйте кнопки "Add Role" и "Remove" для управления списком ролей.
-- **Управлять токенами:** Для каждой роли вы можете напрямую вставить токен Telegram-бота в соответствующее поле. Система автоматически сохранит его в `.env` файл.
-
-**4. Сохранение и Перезагрузка:**
-
-После внесения изменений, нажмите кнопку **"Save & Reload"**. Это действие:
-1. Сохранит все изменения в файлы `roles/agents.yaml` и `.env`.
-2. Автоматически перезапустит ядро приложения, чтобы применить новую конфигурацию.
-3. Отправит в ваш Telegram-чат сообщение о том, что конфигурация обновлена.
-
-**Внимание:** При перезагрузке текущий контекст диалога с агентами будет сброшен.
-
-### Environment Variables
-
-```env
-# Main bot that listens to the target chat
-MAIN_BOT_TOKEN=your_listener_bot_token
-
-# Telegram group ID where NeuroCrew operates
-TARGET_CHAT_ID=123456789
-
-# Role-specific bot tokens (automatically mapped from roles/agents.yaml)
-SOFTWAREDEVBOT_TOKEN=token_for_software_dev_bot
-CODEREVIEWBOT_TOKEN=token_for_code_review_bot
-ARCHITECTBOT_TOKEN=token_for_architect_bot
-DEVOPSBOT_TOKEN=token_for_devops_bot
-SCRUMMASTERBOT_TOKEN=token_for_scrum_master_bot
-# Tokens for inactive roles can be omitted
-
-# Optional: adjust runtime behaviour
-MAX_CONVERSATION_LENGTH=50
-AGENT_TIMEOUT=120
-LOG_LEVEL=INFO
-DATA_DIR=./data
-```
-
-### Puppet Master Architecture Setup
-
-NeuroCrew Lab uses a **"Puppet Master"** layout:
-
-1. The listener bot (MAIN_BOT_TOKEN) monitors the group.
-2. The core routes each user message through the role sequence.
-3. Actor bots reply with the connector output from their respective accounts.
-4. Only messages from `TARGET_CHAT_ID` are processed; everything else is ignored.
-
-Make sure all bots are added to the same group with the appropriate permissions (listener requires `Read Messages`; actors need `Send Messages`).
-
-## 🤖 Supported Agents & Connectors
-
-The system supports a variety of AI models through two types of connectors:
-
-- **ACP Connectors**: For CLI-based agents that support the Agent Communication Protocol.
-  - `opencode`
-  - `qwen`
-  - `gemini`
-- **SDK Connectors**: For direct API access to major providers.
-  - `openai` (GPT models)
-  - `anthropic` (Claude models)
-- **Code Review**: Quality assurance and code analysis
-- **Senior Architect**: System design and architectural decisions
-- **DevOps Senior**: Infrastructure and deployment
-- **Scrum Master**: Process coordination and team facilitation
-
-Additional roles can be added by extending `roles/agents.yaml`.
-
-## 📱 Telegram Commands
-
-- `/start` - Welcome message and introduction
-- `/help` - Help information and available commands
-- `/reset` - Clear conversation history
-- `/status` - Check agent availability status
-
-## 🔄 Workflow
-
-1. **User sends message** to Telegram bot
-2. **Bot processes message** through NeuroCrew core
-3. **Core selects agent** based on sequence
-4. **Connector executes** CLI agent with context
-5. **Response is formatted** and sent back to user
-6. **Conversation history** is maintained in files
-
-## 📁 Project Structure
+## 📁 Структура проекта
 
 ```
 ncrew/
-├── main.py                 # Application entry point
-├── config.py               # Configuration management
-├── telegram_bot.py         # Telegram bot interface
-├── ncrew.py                # Core business logic
-├── connectors/             # AI agent connectors
-│   ├── base.py             # Base class for ACP connectors
-│   ├── base_sdk_connector.py # Base class for SDK connectors
+├── main.py
+├── web_server.py                # Flask UI для ролей
+├── templates/
+│   └── index.html               # форма редактирования ролей/токенов
+├── connectors/
+│   ├── base.py
+│   ├── base_sdk_connector.py
 │   ├── opencode_acp_connector.py
 │   ├── qwen_acp_connector.py
 │   ├── gemini_acp_connector.py
 │   ├── openai_sdk_connector.py
 │   └── anthropic_sdk_connector.py
-├── storage/               # Data persistence
-│   └── file_storage.py    # File-based storage
-├── utils/                 # Utilities
-│   ├── logger.py          # Logging utilities
-│   └── formatters.py      # Message formatting
-├── data/                  # Runtime data
-│   ├── conversations/     # Chat histories
-│   └── logs/             # Application logs
-└── tests/               # Pytest suite (mocked ACP server)
+├── storage/file_storage.py
+├── utils/{logger,formatters,security}.py
+├── roles/agents.yaml + prompts/
+├── data/{conversations,logs}/
+└── tests/
+    ├── test_qwen_acp.py
+    ├── test_gemini_acp.py
+    ├── test_opencode_acp.py
+    ├── test_openai_sdk.py
+    ├── test_anthropic_sdk.py
+    └── test_web_server.py
 ```
 
-## 🐛 Development
+## 🧪 Разработка и тесты
 
-### Running Tests
+- `pytest` — полный набор тестов (ACP + SDK + веб-сервер).  
+- Таргетированные прогоны:  
+  - `pytest tests/test_opencode_acp.py`  
+  - `pytest tests/test_openai_sdk.py`  
+  - `pytest tests/test_web_server.py`
+- Локальная диагностика:  
+  - `LOG_LEVEL=DEBUG python main.py` — подробные логи ACP/SDK.  
+  - `python scripts/validate_system.py` — проверка окружения.  
+  - `python scripts/validate_agents.py` — тест доступности ролей.  
+  - `python scripts/troubleshoot.py` — пошаговый тест конфигурации.
 
-```bash
-pytest
-```
+## 🔧 Траблшутинг
 
-Enable DEBUG logging during local runs if you need detailed ACP traces:
+1. **Токены Telegram** — убедитесь, что в `.env` нет плейсхолдеров, а Listener добавлен в чат без privacy mode.  
+2. **ACL CLI/SDK** — NeuroCrew не хранит ключи; проверьте, что CLI может отвечать из терминала, а переменные `OPENAI_API_KEY/ANTHROPIC_API_KEY` видны процессу.  
+3. **Таймауты агентów** — увеличьте `AGENT_TIMEOUT` или `GEMINI_MAX_TIMEOUTS`, если CLI отвечает дольше.  
+4. **Ошибки прав доступа** — боты-актёры должны иметь право отправлять сообщения в чате.  
+5. **Веб-сервер** — проверьте `WEB_ADMIN_USER/PASS`; при изменении ролей создаётся файл `.reload`, который можно использовать для перезагрузки сервиса.
 
-```bash
-LOG_LEVEL=DEBUG python main.py
-```
+## 📈 Статус MVP
 
-## 🔧 Troubleshooting
+- **Готово:** Puppet Master-архитектура, поддержка ACP и SDK, хранение контекста, веб-панель ролей.  
+- **В работе:** Полная проверка Telegram-процесса с новыми коннекторами, расширение документации.  
+- **Планы:** Добавление новых провайдеров (Claude, GPT-4), улучшение наблюдаемости, расширение сценариев безопасности.
 
-### Common Issues
+## 🤝 Вклад
 
-#### 1. **Bot Token Issues**
-- **Problem:** `MAIN_BOT_TOKEN не сконфигурирован` or role token not found
-- **Solution:** Ensure all required tokens are set in your `.env` file. Check token format and spelling.
+Мы приветствуем PR, которые:
 
-#### 2. **AI CLI Authentication**
-- **Problem:** Agents fail to respond or show authentication errors
-- **Solution:** This is a user responsibility. NeuroCrew Lab does not manage AI authentication.
-  - **For Qwen:** Run `qwen` command interactively and complete OAuth authentication:
-    ```bash
-    qwen  # Choose OAuth option and follow prompts
-    ```
-  - **For Gemini:** Configure authentication according to Gemini CLI documentation
-    ```bash
-    # Follow Gemini CLI authentication prompts
-    # Note: Do NOT use NeuroCrew Lab environment for API keys
-    ```
-  - **For other CLI tools:** Follow each tool's authentication documentation
-  - **Verification:** Test CLI tools independently before using with NeuroCrew Lab
+- добавляют новые коннекторы (ACP или SDK),
+- улучшают обработку ошибок и качество логов,
+- оптимизируют файловое хранилище,
+- совершенствуют документацию на русском языке.
 
-#### 3. **Target Chat ID Configuration**
-- **Problem:** `TARGET_CHAT_ID не сконфигурирован` or bot doesn't respond in group
-- **Solution:** Verify the chat ID is correct (negative number for groups). Ensure the listener bot is added to the group and privacy mode is disabled.
+Перед отправкой убедитесь, что `pytest` проходит, а реальных токенов нет в изменениях.
 
-#### 4. **Role Configuration Errors**
-- **Problem:** `Role-based configuration not enabled` or missing system prompts
-- **Solution:** Check `roles/agents.yaml` exists and is valid YAML. Ensure all system prompt files exist in `roles/prompts/`.
+## 📄 Лицензия
 
-#### 5. **Network Connectivity**
-- **Problem:** `Cannot reach api.telegram.org` or connection timeouts
-- **Solution:** Check internet connectivity. If behind proxy, ensure proxy settings are configured.
-
-#### 6. **Agent Response Timeouts**
-- **Problem:** Agents take too long to respond or timeout
-- **Solution:** Increase `AGENT_TIMEOUT` in environment variables. Check Qwen CLI performance.
-
-#### 7. **Permission Issues**
-- **Problem:** Bots can't send messages in group
-- **Solution:** Ensure actor bots have "Send Messages" permission in the group. Listener bot needs "Read Messages" permission.
-
-### Debug Mode
-
-For detailed troubleshooting, enable debug logging:
-
-```bash
-LOG_LEVEL=DEBUG python main.py
-```
-
-Check logs in `data/logs/ncrew.log` for detailed error information.
-
-### Health Checks
-
-Use these commands in Telegram to diagnose issues:
-- `/status` - Check agent availability
-- `/metrics` - View performance metrics (response times, conversation counts)
-
-## 📈 MVP Status
-
-✅ **Completed:**
-- Project architecture specification
-- Puppet Master architecture implementation
-- Multi-bot configuration system (MAIN_BOT_TOKEN, TARGET_CHAT_ID, role-based `_TOKEN` env vars)
-- Core system refactoring (returns raw responses instead of formatted)
-- Telegram bot Puppet Master logic (actor bot coordination)
-- File storage system implementation
-- Target chat filtering and security
-- Group chat integration
-
-🚧 **In Progress:**
-- Full end-to-end Telegram verification with the new ACP connector
-- Documentation of operating procedures and troubleshooting
-
-📋 **Planned:**
-- Additional AI provider connectors (Claude, GPT-4, etc.)
-- Performance tuning and observability
-- Advanced features beyond MVP
-- Enhanced monitoring and logging
-
-## 🤝 Contributing
-
-This is currently an MVP project. Contributions welcome for:
-
-- Additional agent connectors
-- Enhanced error handling
-- Performance optimizations
-- Security improvements
-- Documentation improvements
-
-## 📄 License
-
-[Add your license information here]
+Укажите подходящую лицензию в этом разделе.
 
 ---
 
-**NeuroCrew Lab** - Where multiple AI agents work together for you! 🚀
-
-
-
-
-### **Настройка Окружения Telegram: Предварительные Требования**
-
-Для корректной работы приложения **NeuroCrew Lab** необходимо предварительно настроить окружение в Telegram в соответствии с архитектурой "Оркестратор-Кукловод". Это разовая процедура, которая обеспечивает централизованное управление и позволяет разным агентам общаться в одном чате от своего имени.
-
-#### Шаг 1: Создание N+1 Ботов
-
-Вам потребуется создать по одному боту для каждого AI-агента и еще один, главный, бот для управления всем процессом. Все боты создаются через официальный **`@BotFather`** в Telegram.
-
-1.  **1 Главный Бот-Слушатель (`Listener Bot`)**
-    *   **Назначение:** Этот бот будет единственным, кто *читает* все сообщения в групповом чате. Вся логика приложения будет работать через него.
-    *   **Действие:** Создайте бота (например, `@NeuroCrewLabListenerBot`) и **сохраните его API-токен**. Этот токен будет использоваться как главный токен приложения (`MAIN_BOT_TOKEN`).
-
-2.  **N Ботов-Актеров (`Actor Bots`)**
-    *   **Назначение:** Эти боты служат "цифровыми аватарами" для ваших CLI-агентов. Они используются только для *отправки* сообщений от имени соответствующего агента.
-    *   **Действие:** Создайте по одному боту для каждой роли из `roles/agents.yaml` (например, `@SoftwareDevBot`, `@CodeReviewBot`, `@ScrumMasterBot`). **Сохраните API-токен каждого из них.**
-
-**Результат этого шага:** У вас должен быть список из N+1 API-токенов.
-
-#### Шаг 2: Настройка Группового Чата
-
-1.  **Создание Группы:**
-    *   Создайте новую группу в Telegram. Это будет рабочее пространство для ваших AI-агентов.
-
-2.  **Добавление Участников:**
-    *   Добавьте в созданную группу **всех** ботов, созданных на Шаге 1 (и "Слушателя", и всех "Актеров").
-    *   Добавьте себя (и других пользователей, которые будут участвовать в диалоге).
-
-3.  ⚠️ **Критически важный шаг: Отключение режима приватности для Бота-Слушателя.**
-    *   По умолчанию боты в группах не видят сообщения, которые не адресованы им напрямую. Чтобы ваш главный бот-слушатель мог читать всю переписку, этот режим нужно отключить.
-    *   **Как это сделать:**
-        1.  Откройте диалог с **`@BotFather`**.
-        2.  Отправьте команду `/mybots`.
-        3.  Выберите вашего **Главного Бота-Слушателя** из списка.
-        4.  Нажмите на кнопку "Bot Settings".
-        5.  Нажмите "Group Privacy".
-        6.  Убедитесь, что режим выключен. Если там написано "Turn on", значит все хорошо. Если написано "Turn off" — нажмите на нее. Статус должен быть: `Privacy mode is disabled...`.
-
-#### Итог: Что у вас должно быть готово
-
-Перед тем как конфигурировать и запускать приложение `NeuroCrew Lab`, убедитесь, что у вас есть:
-
-1.  **Список всех N+1 API-токенов**, разделенных по ролям (1 главный, N для агентов).
-2.  **ID группового чата (Chat ID)**, в котором находятся все участники.
-    *   *Как узнать Chat ID:* Добавьте в вашу группу бота `@userinfobot`, он пришлет информацию о чате, включая его ID (обычно это отрицательное число). После получения ID бота можно удалить.
-
-Эти значения будут использоваться для конфигурации приложения через переменные окружения или конфигурационный файл.
+**NeuroCrew Lab** — виртуальная команда инженеров, работающая прямо в вашем Telegram-чате. Каждый агент имеет собственный голос, но все действуют скоординировано.

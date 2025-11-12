@@ -14,6 +14,7 @@ from typing import List, Dict, Optional, Any, Tuple, AsyncGenerator
 
 from config import Config, RoleConfig
 from storage.file_storage import FileStorage
+from connectors import get_connector_class, get_connector_spec
 from connectors.base import BaseConnector
 from utils.logger import get_logger
 from utils.formatters import split_long_message
@@ -161,13 +162,13 @@ class NeuroCrewLab:
         """
         issues = []
 
+        connector_spec = get_connector_spec(getattr(role, 'agent_type', None))
+
         # 1. Validate role configuration
         if not hasattr(role, 'role_name') or not role.role_name:
             issues.append("missing role_name")
         if not hasattr(role, 'agent_type') or not role.agent_type:
             issues.append("missing agent_type")
-        if not hasattr(role, 'cli_command') or not role.cli_command:
-            issues.append("missing cli_command")
         if not hasattr(role, 'telegram_bot_name') or not role.telegram_bot_name:
             issues.append("missing telegram_bot_name")
 
@@ -177,11 +178,17 @@ class NeuroCrewLab:
             if not connector_available:
                 issues.append(f"no connector for {role.agent_type}")
 
-        # 3. Validate CLI command
-        if role.cli_command:
-            command_valid = self._validate_cli_command(role.cli_command)
-            if not command_valid:
-                issues.append(f"CLI command '{role.cli_command}' invalid")
+        # 3. Validate CLI command when required
+        requires_cli = connector_spec.requires_cli if connector_spec else True
+        cli_command = getattr(role, 'cli_command', '')
+
+        if requires_cli:
+            if not cli_command:
+                issues.append("missing cli_command")
+            else:
+                command_valid = self._validate_cli_command(cli_command)
+                if not command_valid:
+                    issues.append(f"CLI command '{cli_command}' invalid")
 
         # 4. Validate Telegram bot token
         if role.telegram_bot_name:
@@ -197,15 +204,8 @@ class NeuroCrewLab:
     def _validate_connector(self, agent_type):
         """Check if connector exists for agent type."""
         try:
-            from connectors.qwen_acp_connector import QwenACPConnector
-            from connectors.gemini_acp_connector import GeminiACPConnector
-
-            connector_map = {
-                'qwen_acp': QwenACPConnector,
-                'gemini_acp': GeminiACPConnector,
-            }
-
-            return agent_type.lower() in connector_map
+            connector_class = get_connector_class(agent_type)
+            return connector_class is not None
         except ImportError as e:
             self.logger.error(f"Connector import error: {e}")
             return False
@@ -1105,16 +1105,7 @@ class NeuroCrewLab:
         """
         agent_type = role.agent_type.lower()
 
-        # Import connectors dynamically to avoid circular imports
-        from connectors.qwen_acp_connector import QwenACPConnector
-        from connectors.gemini_acp_connector import GeminiACPConnector
-
-        connector_classes = {
-            'qwen_acp': QwenACPConnector,
-            'gemini_acp': GeminiACPConnector,
-        }
-
-        connector_class = connector_classes.get(agent_type)
+        connector_class = get_connector_class(agent_type)
         if not connector_class:
             raise ValueError(f"Unsupported agent type: {agent_type}")
 
