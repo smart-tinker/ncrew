@@ -677,20 +677,6 @@ class NeuroCrewLab:
         role_key = (chat_id, role.role_name)
         response_count = self.role_response_count.get(role_key, 0)
 
-        # On the very first turn for a role in a chat, provide team context
-        if response_count == 0 and self.role_introductions:
-            other_introductions = [
-                f"- {r.display_name}: {self.role_introductions.get(r.role_name, 'N/A')}"
-                for r in self.roles if r.role_name != role.role_name
-            ]
-            team_context = (
-                "--- TEAM CONTEXT ---\n"
-                "You are part of a team. Here are the other members:\n"
-                + "\n".join(other_introductions)
-                + "\n--- END TEAM CONTEXT ---\n\n"
-            )
-            conversation_context = team_context + conversation_context
-
         if response_count > 0 and response_count % Config.SYSTEM_REMINDER_INTERVAL == 0:
             # Add system reminder
             system_reminder = f"\n\n--- SYSTEM REMINDER ---\n{role.system_prompt}\n--- END REMINDER ---\n\n"
@@ -1130,53 +1116,69 @@ class NeuroCrewLab:
     async def perform_startup_introductions(self, bot: 'Bot'):
         """
         Performs a startup introduction sequence for all active roles.
-        This resets each agent's context by creating a new session,
-        asking for an introduction, storing it, and then shutting down.
+        This creates a "prologue" in the conversation history by having each
+        agent introduce itself. This history becomes the initial context for the first user query.
         """
         self.logger.info("=== STARTING AGENT INTRODUCTION SEQUENCE ===")
-        self.role_introductions.clear() # Ensure clean state on every start
         introduction_prompt = "Hello! Please introduce yourself and briefly describe your role and capabilities."
         SYSTEM_CHAT_ID = 0  # A virtual chat_id for this system-level process
+
+        # 1. Clear previous conversation and state for the target chat
+        if Config.TARGET_CHAT_ID:
+            self.logger.info(f"Clearing conversation history for chat ID {Config.TARGET_CHAT_ID}...")
+            await self.storage.clear_conversation(Config.TARGET_CHAT_ID)
+            await self._reset_chat_role_sessions(Config.TARGET_CHAT_ID)
 
         for role in self.roles:
             self.logger.info(f"Introducing role: {role.role_name}...")
             connector = None
-            try:
-                # 1. Create a new session for the agent to reset its context
-                connector = self._get_or_create_role_connector(SYSTEM_CHAT_ID, role)
+            introduction_text = f"Error: Could not get introduction from {role.display_name}."
 
-                # If the connector was somehow already alive, shut it down first for a clean start
+            try:
+                # 2. Create a new temporary session for the agent to reset its context
+                connector = self._get_or_create_role_connector(SYSTEM_CHAT_ID, role)
                 if connector.is_alive():
                     await connector.shutdown()
 
-                # 2. Launch the agent and send its system prompt
+                # 3. Launch the agent and get its introduction
                 await connector.launch(role.cli_command, role.system_prompt)
                 self.logger.info(f"Launched {role.role_name} for introduction.")
 
-                # 3. Send the introduction request and store the response
                 response = await connector.execute(introduction_prompt)
                 introduction_text = response.strip()
-                self.role_introductions[role.role_name] = introduction_text
                 self.logger.info(f"Introduction from {role.role_name}: {introduction_text}")
-
-                # Send the introduction to the group chat
-                formatted_intro = format_agent_response(role.display_name, introduction_text)
-                if Config.TARGET_CHAT_ID:
-                    await bot.send_message(
-                        chat_id=Config.TARGET_CHAT_ID,
-                        text=formatted_intro,
-                        parse_mode='Markdown'
-                    )
-                    await asyncio.sleep(1.5)  # Natural pacing
 
             except Exception as e:
                 self.logger.error(f"Failed to get introduction from {role.role_name}: {e}")
-                self.role_introductions[role.role_name] = f"Error: Could not get introduction from {role.display_name}."
             finally:
-                # 4. Shut down the temporary session to ensure a clean state
+                # 4. Save introduction to conversation history
+                agent_message = {
+                    'role': 'agent',
+                    'agent_name': role.agent_type,
+                    'role_name': role.role_name,
+                    'role_display_name': role.display_name,
+                    'content': introduction_text,
+                    'timestamp': datetime.now().isoformat()
+                }
+                if Config.TARGET_CHAT_ID:
+                    await self.storage.add_message(Config.TARGET_CHAT_ID, agent_message)
+
+                # 5. Send introduction to the visible group chat
+                formatted_intro = format_agent_response(role.display_name, introduction_text)
+                if Config.TARGET_CHAT_ID:
+                    try:
+                        await bot.send_message(
+                            chat_id=Config.TARGET_CHAT_ID,
+                            text=formatted_intro,
+                            parse_mode='Markdown'
+                        )
+                        await asyncio.sleep(1.5)  # Natural pacing
+                    except Exception as tg_error:
+                        self.logger.error(f"Failed to send introduction from {role.role_name} to Telegram: {tg_error}")
+
+                # 6. Shut down the temporary session
                 if connector:
                     await connector.shutdown()
-                    # Remove the temporary session from the dictionary
                     key = (SYSTEM_CHAT_ID, role.role_name)
                     if key in self.connector_sessions:
                         del self.connector_sessions[key]
