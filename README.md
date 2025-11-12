@@ -2,7 +2,10 @@
 
 🚀 **Telegram-based orchestration platform for autonomous AI coding agents**
 
-NeuroCrew Lab coordinates a roster of role-specific assistants inside a Telegram group. Each role talks directly to AI CLI agents (Qwen Code 0.1.4 or Gemini experimental) via the ACP protocol, keeping long-lived sessions and streaming responses back to the chat.
+NeuroCrew Lab coordinates a roster of role-specific assistants inside a Telegram group. Each role is powered by an AI model, accessed through one of two methods:
+
+1.  **ACP Connectors**: For CLI-based agents like OpenCode, Qwen, and Gemini, the platform uses the Agent Communication Protocol (ACP) to maintain long-lived, stateful sessions.
+2.  **SDK Connectors**: For direct API access to providers like OpenAI and Anthropic, the platform uses official Python SDKs to manage conversations.
 
 ## 🎯 MVP Features
 
@@ -27,7 +30,9 @@ User → Group Chat → Listener Bot → NeuroCrew Core → Role Sequence → CL
 - **Listener Bot**: Reads every message in the target group chat
 - **NeuroCrew Core**: Coordinates role-based agents, maintains conversation context, manages stateful sessions
 - **Role Configuration**: YAML-based role definitions in `roles/agents.yaml` with system prompts, CLI commands, and bot tokens
-- **Connector**: `QwenACPConnector` and `GeminiACPConnector` handle ACP protocol communication with Qwen and Gemini CLI agents
+- **Connectors**:
+    - **ACP Connectors**: `OpenCodeACPConnector`, `QwenACPConnector`, and `GeminiACPConnector` manage subprocesses for CLI-based agents.
+    - **SDK Connectors**: `OpenAISDKConnector` and `AnthropicSDKConnector` interact directly with APIs.
 - **Actor Bots**: Role-specific bots that respond under their designated names
 - **File Storage**: Persistent conversation history and session state
 - **Target Chat Filtering**: Ensures operation only in designated Telegram groups
@@ -49,9 +54,35 @@ User → Group Chat → Listener Bot → NeuroCrew Core → Role Sequence → CL
 - Python 3.10+ (the project uses `asyncio` extensively)
 - Node.js 20+ (required by the Qwen CLI)
 - Telegram bot tokens for the listener bot and every actor bot
-- AI CLI agent: any CLI tool (Qwen CLI, Gemini CLI, Claude Code, etc.) **pre-authenticated by user**
+- **For ACP-based agents**: A pre-authenticated CLI tool (OpenCode, Qwen CLI, Gemini CLI, etc.).
+- **For SDK-based agents**: API keys for the desired services (OpenAI, Anthropic), configured as environment variables.
 
-**⚠️ Important:** NeuroCrew Lab does NOT manage AI provider authentication. Users must set up and authenticate CLI tools independently.
+**⚠️ Important:** NeuroCrew Lab does NOT manage AI provider authentication. For both CLI and SDK agents, authentication must be configured in the user's environment, not in the project's `.env` file.
+
+### SDK Configuration
+
+For direct API access, ensure the following environment variables are set in your shell configuration (`~/.bashrc`, `~/.zshrc`, etc.):
+
+```sh
+export OPENAI_API_KEY="your_openai_api_key"
+export ANTHROPIC_API_KEY="your_anthropic_api_key"
+```
+
+The application's SDK connectors will automatically detect and use these variables.
+
+### CLI Agent Configuration
+
+**For OpenCode:**
+```bash
+# Easiest way via install script
+curl -fsSL https://opencode.ai/install | bash
+
+# Or via npm/bun
+npm i -g opencode-ai@latest
+
+# Authenticate by running opencode and following the prompts
+opencode auth login
+```
 
 **For Qwen:**
 ```bash
@@ -66,9 +97,12 @@ qwen                    # run once, authenticate via OAuth in the interactive me
 go install github.com/google/gemini-cli@latest
 gemini --version        # verify installation
 
-# Authenticate using your preferred method:
-# Follow Gemini CLI authentication prompts or configure ~/.gemini/settings.json
-# Note: Do NOT set GEMINI_API_KEY in NeuroCrew Lab environment
+# Authenticate using your preferred method. The recommended way is to configure
+# your API key in the dedicated settings file: ~/.gemini/settings.json
+#
+# ⚠️ Security Warning: Do NOT set the GEMINI_API_KEY environment variable in the
+# `.env` file of this project. The CLI should be pre-authenticated in your
+# global user environment, not within the application's environment.
 ```
 
 **For other CLI tools:**
@@ -180,11 +214,17 @@ NeuroCrew Lab uses a **"Puppet Master"** layout:
 
 Make sure all bots are added to the same group with the appropriate permissions (listener requires `Read Messages`; actors need `Send Messages`).
 
-## 🤖 Supported Roles & Agents
+## 🤖 Supported Agents & Connectors
 
-The system supports multiple roles, each powered by AI CLI agents (Qwen Code 0.1.4 or Gemini experimental) via ACP protocol:
+The system supports a variety of AI models through two types of connectors:
 
-- **Software Developer**: Code implementation and technical solutions
+- **ACP Connectors**: For CLI-based agents that support the Agent Communication Protocol.
+  - `opencode`
+  - `qwen`
+  - `gemini`
+- **SDK Connectors**: For direct API access to major providers.
+  - `openai` (GPT models)
+  - `anthropic` (Claude models)
 - **Code Review**: Quality assurance and code analysis
 - **Senior Architect**: System design and architectural decisions
 - **DevOps Senior**: Infrastructure and deployment
@@ -217,9 +257,13 @@ ncrew/
 ├── telegram_bot.py         # Telegram bot interface
 ├── ncrew.py                # Core business logic
 ├── connectors/             # AI agent connectors
-│   ├── base.py             # Shared async process wrapper
-│   ├── qwen_acp_connector.py  # Qwen ACP 0.1.4 connector
-│   └── gemini_acp_connector.py  # Gemini ACP experimental connector
+│   ├── base.py             # Base class for ACP connectors
+│   ├── base_sdk_connector.py # Base class for SDK connectors
+│   ├── opencode_acp_connector.py
+│   ├── qwen_acp_connector.py
+│   ├── gemini_acp_connector.py
+│   ├── openai_sdk_connector.py
+│   └── anthropic_sdk_connector.py
 ├── storage/               # Data persistence
 │   └── file_storage.py    # File-based storage
 ├── utils/                 # Utilities

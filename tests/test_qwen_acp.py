@@ -61,11 +61,6 @@ async def main():
                     },
                 },
             )
-        elif method == "authenticate":
-            await write_line(
-                writer,
-                {"jsonrpc": "2.0", "id": msg_id, "result": {"authenticated": True}},
-            )
         elif method == "session/new":
             await write_line(
                 writer,
