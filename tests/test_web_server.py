@@ -1,0 +1,65 @@
+import os
+import base64
+import pytest
+from unittest.mock import patch, mock_open
+from web_server import app
+
+@pytest.fixture
+def client():
+    app.config['TESTING'] = True
+    with app.test_client() as client:
+        yield client
+
+def test_auth_required(client):
+    """Test that authentication is required to access the root URL."""
+    response = client.get('/')
+    assert response.status_code == 401
+
+def test_auth_success(client):
+    """Test that authentication succeeds with correct credentials."""
+    os.environ['WEB_ADMIN_USER'] = 'admin'
+    os.environ['WEB_ADMIN_PASS'] = 'password'
+
+    headers = {
+        'Authorization': 'Basic ' + base64.b64encode(b"admin:password").decode('utf-8')
+    }
+
+    with patch('web_server.get_roles', return_value=[]):
+        response = client.get('/', headers=headers)
+        assert response.status_code == 200
+
+@patch('builtins.open', new_callable=mock_open, read_data="roles: []")
+def test_index_page_loads(mock_file_open, client):
+    """Test that the index page loads and displays roles."""
+    headers = {
+        'Authorization': 'Basic ' + base64.b64encode(b"admin:password").decode('utf-8')
+    }
+
+    response = client.get('/', headers=headers)
+    assert response.status_code == 200
+
+
+@patch('web_server.save_roles')
+@patch('builtins.open', new_callable=mock_open)
+def test_save_roles(mock_file_open, mock_save_roles, client):
+    """Test that saving roles redirects and creates a reload file."""
+    headers = {
+        'Authorization': 'Basic ' + base64.b64encode(b"admin:password").decode('utf-8')
+    }
+
+    form_data = {
+        'role_name': ['new_role'],
+        'display_name': ['New Role'],
+        'system_prompt_file': ['prompts/new.md'],
+        'agent_type': ['qwen_acp'],
+        'cli_command': ['qwen'],
+        'description': ['A new role.'],
+        'telegram_bot_token': ['new_token']
+    }
+
+    with patch('web_server.get_roles', return_value=[]):
+        response = client.post('/save', headers=headers, data=form_data, follow_redirects=True)
+
+    assert response.status_code == 200
+    mock_save_roles.assert_called_once()
+    mock_file_open.assert_called_with('.reload', 'w')

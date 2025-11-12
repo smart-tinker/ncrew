@@ -67,10 +67,19 @@ def main():
         sys.exit(1)
 
 
+import os
+import threading
+from web_server import run_web_server
+
 async def async_main():
     """Async main function that handles the complete application lifecycle."""
     # Import and create bot instance
     from telegram_bot import TelegramBot
+
+    # Start web server in a separate thread
+    web_thread = threading.Thread(target=run_web_server, daemon=True)
+    web_thread.start()
+    logger.info("🚀 Web server started in a background thread")
 
     # Create global bot reference for signal handling
     global bot_instance
@@ -106,10 +115,18 @@ async def async_main():
         await bot_instance.application.start()
         await bot_instance.application.updater.start_polling(drop_pending_updates=True)
 
-        # Keep the bot running
+        # Keep the bot running and check for reload flag
         try:
-            # Run indefinitely until interrupted
             while True:
+                if os.path.exists('.reload'):
+                    logger.info("Reload flag detected. Restarting application...")
+                    await bot_instance.application.bot.send_message(
+                        chat_id=Config.TARGET_CHAT_ID,
+                        text="Configuration updated. Restarting and starting a new conversation..."
+                    )
+                    await graceful_shutdown()
+                    os.remove('.reload')
+                    os.execv(sys.executable, ['python'] + sys.argv)
                 await asyncio.sleep(1)
         except asyncio.CancelledError:
             logger.info("Bot operation cancelled")
