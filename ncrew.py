@@ -1159,6 +1159,16 @@ class NeuroCrewLab:
                 self.role_introductions[role.role_name] = introduction_text
                 self.logger.info(f"Introduction from {role.role_name}: {introduction_text}")
 
+                # Send the introduction to the group chat
+                formatted_intro = format_agent_response(role.display_name, introduction_text)
+                if Config.TARGET_CHAT_ID:
+                    await bot.send_message(
+                        chat_id=Config.TARGET_CHAT_ID,
+                        text=formatted_intro,
+                        parse_mode='Markdown'
+                    )
+                    await asyncio.sleep(1.5)  # Natural pacing
+
             except Exception as e:
                 self.logger.error(f"Failed to get introduction from {role.role_name}: {e}")
                 self.role_introductions[role.role_name] = f"Error: Could not get introduction from {role.display_name}."
