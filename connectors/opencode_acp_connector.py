@@ -1,8 +1,8 @@
 """
-Qwen ACP connector implementing the real 0.1.4 ACP JSON-RPC protocol.
+OpenCode ACP connector implementing the Agent Communication Protocol.
 
-This connector talks directly to the `qwen --experimental-acp` CLI and follows
-the same handshake sequence the official CLI expects:
+This connector talks directly to the `opencode acp` CLI and follows the
+standard ACP handshake sequence:
 
     initialize → session/new → session/prompt
 
@@ -33,11 +33,10 @@ class _SessionInfo:
     session_id: str
 
 
-class QwenACPConnector(BaseConnector):
-    """Connector that implements the Qwen ACP 0.1.4 protocol."""
+class OpenCodeACPConnector(BaseConnector):
+    """Connector that implements the OpenCode ACP protocol."""
 
-    DEFAULT_COMMAND = "qwen --experimental-acp"
-    AUTH_METHOD_QWEN = "qwen-oauth"
+    DEFAULT_COMMAND = "opencode acp"
 
     def __init__(self):
         super().__init__()
@@ -53,13 +52,13 @@ class QwenACPConnector(BaseConnector):
         self.request_timeout: float = max(5.0, float(getattr(Config, "AGENT_TIMEOUT", 120)))
 
     async def launch(self, command: str, system_prompt: str):
-        """Launch Qwen CLI and initialize ACP session."""
+        """Launch OpenCode CLI and initialize ACP session."""
         if self.is_alive():
             await self.shutdown()
 
         args = self._prepare_command_args(command or self.DEFAULT_COMMAND)
         env = self._get_clean_env()
-        self.logger.info("Starting Qwen ACP process: %s", " ".join(args))
+        self.logger.info("Starting OpenCode ACP process: %s", " ".join(args))
 
         self.process = await asyncio.create_subprocess_exec(
             *args,
@@ -85,7 +84,7 @@ class QwenACPConnector(BaseConnector):
 
     async def execute(self, delta_prompt: str) -> str:
         if not self.is_alive() or not self.session_id:
-            raise RuntimeError("Qwen ACP session is not active. Launch the connector first.")
+            raise RuntimeError("OpenCode ACP session is not active. Launch the connector first.")
 
         response_text = await self._send_prompt(delta_prompt)
         if response_text:
@@ -112,8 +111,8 @@ class QwenACPConnector(BaseConnector):
 
     def get_info(self) -> Dict[str, Any]:
         return {
-            "name": "Qwen ACP Connector (v0.1.4)",
-            "type": "qwen_acp",
+            "name": "OpenCode ACP Connector",
+            "type": "opencode_acp",
             "status": "active" if self.is_alive() else "inactive",
             "session_id": self.session_id,
         }
@@ -123,7 +122,7 @@ class QwenACPConnector(BaseConnector):
 
         try:
             result = subprocess.run(
-                ["qwen", "--version"],
+                ["opencode", "--version"],
                 capture_output=True,
                 text=True,
                 timeout=10,
@@ -160,7 +159,7 @@ class QwenACPConnector(BaseConnector):
         )
         session_id = result.get("sessionId")
         if not session_id:
-            raise RuntimeError("Qwen ACP did not return a sessionId.")
+            raise RuntimeError("OpenCode ACP did not return a sessionId.")
         self.session_id = session_id
         if self.process:
             self.current_session = _SessionInfo(pid=self.process.pid, session_id=session_id)
@@ -193,7 +192,7 @@ class QwenACPConnector(BaseConnector):
         collect_output: bool = False,
     ) -> Tuple[JsonDict, str]:
         if not self.process or not self.process.stdin or not self.process.stdout:
-            raise RuntimeError("Qwen ACP process is not available.")
+            raise RuntimeError("OpenCode ACP process is not available.")
 
         request_id = self._next_message_id()
         message = {
@@ -216,7 +215,7 @@ class QwenACPConnector(BaseConnector):
                 self.logger.error(
                     "Timed out waiting for response (%s, id=%s)", method, request_id
                 )
-                raise RuntimeError(f"Qwen ACP timeout while waiting for {method}")
+                raise RuntimeError(f"OpenCode ACP timeout while waiting for {method}")
             try:
                 message = await asyncio.wait_for(self._read_message(), timeout=remaining)
                 deadline = loop.time() + self.request_timeout
@@ -227,13 +226,13 @@ class QwenACPConnector(BaseConnector):
                     request_id,
                     self.request_timeout,
                 )
-                raise RuntimeError(f"Qwen ACP timeout while waiting for {method}") from None
+                raise RuntimeError(f"OpenCode ACP timeout while waiting for {method}") from None
             except (BrokenPipeError, ConnectionResetError) as e:
                 self.logger.error("Connection broken during ACP communication: %s", e)
-                raise RuntimeError(f"Qwen ACP connection error: {e}") from e
+                raise RuntimeError(f"OpenCode ACP connection error: {e}") from e
 
             if message is None:
-                raise RuntimeError("Qwen ACP process terminated unexpectedly.")
+                raise RuntimeError("OpenCode ACP process terminated unexpectedly.")
 
             if "method" in message and "id" in message and message.get("id") != request_id:
                 await self._handle_agent_request(message)
@@ -248,12 +247,12 @@ class QwenACPConnector(BaseConnector):
                         else str(error)
                     )
                     self.logger.error(
-                        "Qwen ACP returned error for %s (id=%s): %s",
+                        "OpenCode ACP returned error for %s (id=%s): %s",
                         method,
                         request_id,
                         error,
                     )
-                    raise RuntimeError(f"Qwen ACP error ({method}): {error_message}")
+                    raise RuntimeError(f"OpenCode ACP error ({method}): {error_message}")
 
                 result = message.get("result", {})
                 aggregated_text = "".join(collected_chunks or [])
@@ -336,7 +335,7 @@ class QwenACPConnector(BaseConnector):
 
     async def _write_message(self, message: JsonDict, expect_response: bool = True):
         if not self.process or not self.process.stdin:
-            raise RuntimeError("Qwen ACP process stdin is not available.")
+            raise RuntimeError("OpenCode ACP process stdin is not available.")
         await self._write_raw(json.dumps(message) + "\n")
         if expect_response:
             self.logger.debug("Message written: %s", message.get("method"))
@@ -348,7 +347,7 @@ class QwenACPConnector(BaseConnector):
 
     async def _read_message(self) -> Optional[JsonDict]:
         if not self.process or not self.process.stdout:
-            raise RuntimeError("Qwen ACP process stdout is not available.")
+            raise RuntimeError("OpenCode ACP process stdout is not available.")
 
         while True:
             raw = await self.process.stdout.readline()
@@ -367,15 +366,12 @@ class QwenACPConnector(BaseConnector):
                 )
                 return message
             except json.JSONDecodeError:
-                self.logger.warning("Failed to decode JSON line from Qwen: %s", text)
+                self.logger.warning("Failed to decode JSON line from OpenCode: %s", text)
 
     def _prepare_command_args(self, command: str) -> List[str]:
         args = shlex.split(command)
         if not args:
             args = shlex.split(self.DEFAULT_COMMAND)
-
-        if "--experimental-acp" not in args:
-            args.append("--experimental-acp")
         return args
 
     def _next_message_id(self) -> int:
