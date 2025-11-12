@@ -1,4 +1,4 @@
-# tests/test_gemini_acp.py
+# tests/test_opencode_acp.py
 import asyncio
 import json
 import sys
@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 import pytest_asyncio
 
-from connectors.gemini_acp_connector import GeminiACPConnector
+from connectors.opencode_acp_connector import OpenCodeACPConnector
 
 
 MOCK_SERVER_SOURCE = """
@@ -54,9 +54,7 @@ async def main():
                     "id": msg_id,
                     "result": {
                         "protocolVersion": 1,
-                        "authMethods": [
-                            {"id": "gemini-api-key", "name": "Mock API Key", "description": "Mock"}
-                        ],
+                        "authMethods": [],
                         "agentCapabilities": {"loadSession": False, "promptCapabilities": {}},
                     },
                 },
@@ -113,19 +111,19 @@ if __name__ == "__main__":
 
 
 @pytest_asyncio.fixture
-async def mock_gemini_command(tmp_path: Path):
-    """Create a temporary mock Gemini ACP server and return the command string."""
-    script_path = tmp_path / "mock_gemini_acp.py"
+async def mock_opencode_command(tmp_path: Path):
+    """Create a temporary mock OpenCode ACP server and return the command string."""
+    script_path = tmp_path / "mock_opencode_acp.py"
     script_path.write_text(MOCK_SERVER_SOURCE)
     command = f"{sys.executable} -u {script_path}"
     yield command
 
 
 @pytest.mark.asyncio
-async def test_gemini_acp_connector_integration(mock_gemini_command):
-    connector = GeminiACPConnector()
+async def test_opencode_acp_connector_integration(mock_opencode_command):
+    connector = OpenCodeACPConnector()
 
-    await connector.launch(mock_gemini_command, "System prompt for tests.")
+    await connector.launch(mock_opencode_command, "System prompt for tests.")
     assert connector.is_alive()
     assert connector.session_id == "mock-session-id"
 

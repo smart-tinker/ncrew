@@ -17,7 +17,6 @@ import asyncio
 import json
 import os
 import shlex
-import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -51,9 +50,7 @@ class GeminiACPConnector(BaseConnector):
         self._conversation_history: List[str] = []
         self.current_session: Optional[_SessionInfo] = None
         # Respect global timeout but never allow less than 5 seconds
-        self.request_timeout: float = max(30.0, float(getattr(Config, "AGENT_TIMEOUT", 120)))
-        # Deadlock detection configuration
-        self.max_consecutive_timeouts: int = int(getattr(Config, "GEMINI_MAX_TIMEOUTS", 5))
+        self.request_timeout: float = max(5.0, float(getattr(Config, "AGENT_TIMEOUT", 120)))
 
     async def launch(self, command: str, system_prompt: str):
         """Launch Gemini CLI and initialize ACP session."""
@@ -102,27 +99,8 @@ class GeminiACPConnector(BaseConnector):
         if self.is_alive() and self.session_id:
             try:
                 await self._send_notification("session/cancel", {"sessionId": self.session_id})
-                # Give process time to handle the notification
-                await asyncio.sleep(0.1)
-            except Exception as e:
-                self.logger.debug("Error sending session cancel notification: %s", str(e))
-
-        # Terminate process properly with reduced timeout
-        if self.process:
-            try:
-                self.process.terminate()
-                try:
-                    await asyncio.wait_for(self.process.wait(), timeout=1.0)  # Reduced from 3.0
-                except asyncio.TimeoutError:
-                    self.logger.debug("Process did not terminate gracefully, force killing...")  # Reduced verbosity
-                    self.process.kill()
-                    await asyncio.wait_for(self.process.wait(), timeout=1.0)  # Reduced from 2.0
-            except (ProcessLookupError, RuntimeError) as e:
-                # Process might have already terminated or event loop closed
-                self.logger.debug("Process already terminated or event loop closed: %s", str(e))  # Reduced verbosity
-            except Exception as e:
-                self.logger.debug("Error shutting down process: %s", str(e))  # Reduced verbosity
-
+            except Exception:
+                pass
         await super().shutdown()
         self.session_id = None
         self.initialized = False
@@ -158,55 +136,36 @@ class GeminiACPConnector(BaseConnector):
         response, _ = await self._send_request(
             "initialize",
             {
-                "protocolVersion": "2024-11-05",
-                "capabilities": {},
-                "clientInfo": {
-                    "name": "NeuroCrew Lab Gemini Connector",
-                    "version": "1.0.0"
-                }
+                "protocolVersion": 1,
+                "clientCapabilities": {
+                    "fs": {"readTextFile": False, "writeTextFile": False},
+                },
             },
-            collect_output=False,
         )
-
-        self.logger.debug(f"Initialize response: {response}")
-
-        if "capabilities" in response:
-            self.agent_capabilities = response["capabilities"]
-        if "availableAuthMethods" in response:
-            self.available_auth_methods = response["availableAuthMethods"]
-
-        self.logger.info(f"Available auth methods: {self.available_auth_methods}")
-        self.logger.info(f"Capabilities: {self.agent_capabilities}")
-
         self.initialized = True
-        self.logger.info("Gemini ACP initialized successfully")
+        self.agent_capabilities = response.get("agentCapabilities", {})
+        self.available_auth_methods = [
+            method.get("id")
+            for method in response.get("authMethods", [])
+            if isinstance(method, dict) and method.get("id")
+        ]
 
     async def _create_session(self):
-        response, _ = await self._send_request(
+        result, _ = await self._send_request(
             "session/new",
             {
-                "sessionId": None,
-                "mode": "interactive",
-                "cwd": os.getcwd(),
-                "mcpServers": []
+                "cwd": str(Path.cwd()),
+                "mcpServers": [],
             },
-            collect_output=False,
         )
-
-        if "result" in response and "sessionId" in response["result"]:
-            self.session_id = response["result"]["sessionId"]
-            if self.process and self.session_id:
-                self.current_session = _SessionInfo(
-                    pid=self.process.pid,
-                    session_id=self.session_id
-                )
-            self.logger.info(f"Gemini ACP session created: {self.session_id}")
-        else:
-            self.logger.error(f"Session creation failed. Response: {response}")
-            raise RuntimeError(f"Failed to create Gemini ACP session. Response: {response}")
+        session_id = result.get("sessionId")
+        if not session_id:
+            raise RuntimeError("Gemini ACP did not return a sessionId.")
+        self.session_id = session_id
+        if self.process:
+            self.current_session = _SessionInfo(pid=self.process.pid, session_id=session_id)
 
     async def _send_prompt(self, prompt: str) -> str:
-        self.logger.debug(f"Sending prompt: {prompt[:100]}...")
         result, aggregated_text = await self._send_request(
             "session/prompt",
             {
@@ -220,13 +179,6 @@ class GeminiACPConnector(BaseConnector):
             },
             collect_output=True,
         )
-
-        self.logger.debug(f"Prompt result: {result}")
-        self.logger.debug(f"Aggregated text length: {len(aggregated_text)}")
-
-        # Handle both direct result and result.result structure
-        if "result" in result:
-            result = result["result"]
 
         stop_reason = result.get("stopReason")
         if stop_reason:
@@ -243,275 +195,213 @@ class GeminiACPConnector(BaseConnector):
         if not self.process or not self.process.stdin or not self.process.stdout:
             raise RuntimeError("Gemini ACP process is not available.")
 
-        self.message_id += 1
-        request = {
+        request_id = self._next_message_id()
+        message = {
             "jsonrpc": "2.0",
-            "id": self.message_id,
+            "id": request_id,
             "method": method,
-            "params": params
+            "params": params,
         }
 
-        request_json = json.dumps(request) + "\n"
-        self.logger.debug(f"Sending request: {method}")
+        await self._write_message(message)
+        self.logger.debug("Sent request %s (%s)", request_id, method)
 
-        # Send request
-        self.process.stdin.write(request_json.encode('utf-8'))
-        await self.process.stdin.drain()
+        collected_chunks: Optional[List[str]] = [] if collect_output else None
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + self.request_timeout
 
-        # Read response
-        if collect_output:
-            return await self._read_response_with_output()
-        else:
-            return await self._read_response(), ""
-
-    async def _read_response(self) -> JsonDict:
-        """Read a single JSON-RPC response."""
-        if not self.process or not self.process.stdout:
-            raise RuntimeError("Process not available for reading")
-
-        try:
-            # Read line by line until we get a complete JSON response
-            while True:
-                line = await asyncio.wait_for(
-                    self.process.stdout.readline(),
-                    timeout=self.request_timeout
+        while True:
+            remaining = deadline - loop.time()
+            if remaining <= 0:
+                self.logger.error(
+                    "Timed out waiting for response (%s, id=%s)", method, request_id
                 )
-
-                if not line:
-                    self.logger.warning("Gemini ACP process closed unexpectedly - attempting graceful degradation")
-                    # Return empty response instead of crashing
-                    return {"error": {"code": -1, "message": "Process closed unexpectedly"}, "result": {"text": ""}}
-
-                line_str = line.decode('utf-8').strip()
-                if not line_str:
-                    continue
-
-                try:
-                    response = json.loads(line_str)
-                    self.logger.debug(f"Received response for method: {response.get('id', 'unknown')}")
-                    return response
-                except json.JSONDecodeError:
-                    # Not a complete JSON message, continue reading
-                    continue
-
-        except asyncio.TimeoutError:
-            raise RuntimeError(f"Timeout waiting for Gemini ACP response (>{self.request_timeout}s)")
-
-    async def _read_response_with_output(self) -> Tuple[JsonDict, str]:
-        """Read response and collect streaming output with enhanced deadlock detection."""
-        import time
-        aggregated_text = ""
-        final_response = None
-        start_time = time.time()
-        consecutive_timeouts = 0
-        last_activity_time = start_time
-
-        while time.time() - start_time < self.request_timeout:
+                raise RuntimeError(f"Gemini ACP timeout while waiting for {method}")
             try:
-                response = await asyncio.wait_for(self._read_response(), timeout=1.0)
-                # Reset timeout counters on successful response
-                consecutive_timeouts = 0
-                last_activity_time = time.time()
+                message = await asyncio.wait_for(self._read_message(), timeout=remaining)
+                deadline = loop.time() + self.request_timeout
             except asyncio.TimeoutError:
-                consecutive_timeouts += 1
-                time_since_last_activity = time.time() - last_activity_time
+                self.logger.error(
+                    "Timed out waiting for response (%s, id=%s) after %.1fs",
+                    method,
+                    request_id,
+                    self.request_timeout,
+                )
+                raise RuntimeError(f"Gemini ACP timeout while waiting for {method}") from None
+            except (BrokenPipeError, ConnectionResetError) as e:
+                self.logger.error("Connection broken during ACP communication: %s", e)
+                raise RuntimeError(f"Gemini ACP connection error: {e}") from e
 
-                # Enhanced deadlock detection
-                if consecutive_timeouts >= self.max_consecutive_timeouts:
-                    self.logger.error(f"Deadlock detected: {self.max_consecutive_timeouts} consecutive timeouts, forcing abort")
-                    if aggregated_text:
-                        # Return whatever we have collected
-                        final_response = {
-                            "result": {
-                                "text": aggregated_text,
-                                "source": "partial_response_deadlock_recovery",
-                                "final_response": False
-                            }
-                        }
-                        break
-                    else:
-                        raise RuntimeError(f"Subprocess deadlock: No response for {max_consecutive_timeouts} consecutive attempts")
+            if message is None:
+                raise RuntimeError("Gemini ACP process terminated unexpectedly.")
 
-                # Check if we have enough to proceed
-                if final_response is not None:
-                    self.logger.debug(f"Timeout waiting for more responses (consecutive: {consecutive_timeouts}), proceeding with available data")
-                    break
-
-                # Enhanced logging for debugging
-                if consecutive_timeouts == 2:  # Log on second timeout to reduce spam
-                    self.logger.warning(f"Multiple timeouts detected ({consecutive_timeouts}), last activity: {time_since_last_activity:.1f}s ago")
-
+            if "method" in message and "id" in message and message.get("id") != request_id:
+                await self._handle_agent_request(message)
                 continue
 
-            # self.logger.debug(f"Received response: {response}")
+            if message.get("id") == request_id:
+                if "error" in message:
+                    error = message["error"]
+                    error_message = (
+                        error.get("message", "Unknown error")
+                        if isinstance(error, dict)
+                        else str(error)
+                    )
+                    self.logger.error(
+                        "Gemini ACP returned error for %s (id=%s): %s",
+                        method,
+                        request_id,
+                        error,
+                    )
+                    raise RuntimeError(f"Gemini ACP error ({method}): {error_message}")
 
-            # Check if this is a notification about agent message chunk
-            if response.get("method") == "session/update":
-                params = response.get("params", {})
-                update = params.get("update", {})
-                session_update_type = update.get("sessionUpdate", "unknown")
-                # self.logger.debug(f"Session update: {session_update_type}")
+                result = message.get("result", {})
+                aggregated_text = "".join(collected_chunks or [])
+                return result, aggregated_text
 
-                # Handle agent message chunks with validation
-                try:
-                    if "agentMessageChunk" in params:
-                        chunk_text = params["agentMessageChunk"]
-                        if isinstance(chunk_text, str) and chunk_text.strip():
-                            aggregated_text += chunk_text
-                            self.logger.debug(f"Received legacy format chunk: {len(chunk_text)} chars")
-                        else:
-                            self.logger.warning(f"Invalid agentMessageChunk format: {type(chunk_text)}")
-                    elif session_update_type == "agent_message_chunk":
-                        # Handle new format with nested update structure
-                        content = update.get("content", {})
-                        if isinstance(content, dict):
-                            content_type = content.get("type")
-                            if content_type == "text":
-                                chunk_text = content.get("text", "")
-                                if isinstance(chunk_text, str) and chunk_text.strip():
-                                    aggregated_text += chunk_text
-                                    self.logger.debug(f"Received new format chunk: {len(chunk_text)} chars")
-                                else:
-                                    self.logger.warning(f"Invalid text content in agent_message_chunk: {type(chunk_text)}")
-                            else:
-                                self.logger.warning(f"Unsupported content type in agent_message_chunk: {content_type}")
-                        else:
-                            self.logger.warning(f"Invalid content structure in agent_message_chunk: {type(content)}")
-                    elif "done" in params and params["done"]:
-                        self.logger.debug("Session update indicates completion (legacy format)")
-                        break
-                    elif session_update_type == "done":
-                        self.logger.info("Session update indicates completion (new format)")
-                        break
-                    elif "error" in params:
-                        error_msg = params.get('error', 'Unknown error')
-                        self.logger.error(f"Session update error: {error_msg}")
-                        # Don't break immediately - try to get partial response
-                        if aggregated_text:
-                            self.logger.info("Continuing despite error, using aggregated text")
-                            break
-                        else:
-                            self.logger.warning("No aggregated text available, breaking due to error")
-                            break
-                    else:
-                        # Unknown session update type - log but continue
-                        self.logger.debug(f"Unknown session update type: {session_update_type}")
-                        if session_update_type not in ["unknown"]:
-                            self.logger.debug(f"Session update params: {list(params.keys())}")
+            if "method" in message and "id" not in message:
+                self._handle_notification(message, collected_chunks)
 
-                except Exception as e:
-                    self.logger.error(f"Error processing session update: {e}")
-                    # Continue processing if we have aggregated text
-                    if aggregated_text:
-                        self.logger.info("Continuing despite parse error, using aggregated text")
-                        break
+    async def _handle_agent_request(self, message: JsonDict):
+        method = message.get("method")
+        request_id = message.get("id")
+        params = message.get("params", {})
 
-            # Check if this is the final response to our request
-            elif "id" in response and response["id"] == self.message_id:
-                final_response = response
-                self.logger.debug(f"Final response received: {final_response}")
-                # Continue reading for a short time to get any remaining chunks
+        if request_id is None:
+            return
 
-        if final_response is None:
-            self.logger.warning("Did not receive final response, but we have aggregated text")
-            # In some cases, we might not get a final response but still have the content
-            # Create a proper final response with aggregated text
-            if aggregated_text.strip():
-                final_response = {
-                    "result": {
-                        "text": aggregated_text,
-                        "source": "aggregated_chunks",
-                        "final_response": False
-                    }
+        if method == "session/request_permission":
+            result = self._auto_grant_permission(params)
+        else:
+            result = {
+                "error": {
+                    "code": -32601,
+                    "message": f"Method {method} not supported by client.",
                 }
-                self.logger.info(f"Using aggregated text as response ({len(aggregated_text)} chars)")
-            else:
-                # No content available - create empty response
-                final_response = {
-                    "result": {
-                        "text": "",
-                        "source": "no_content",
-                        "final_response": False
-                    }
-                }
-                self.logger.warning("No content available, returning empty response")
+            }
 
-        # Check for errors with graceful handling
-        if final_response and "error" in final_response:
-            error = final_response["error"]
-            error_msg = error.get('message', 'Unknown error')
+        if "error" in result:
+            payload = {
+                "jsonrpc": "2.0",
+                "id": request_id,
+                "error": result["error"],
+            }
+        else:
+            payload = {
+                "jsonrpc": "2.0",
+                "id": request_id,
+                "result": result,
+            }
 
-            # Try to use aggregated text despite the error
-            if aggregated_text.strip():
-                self.logger.error(f"Gemini ACP error occurred, but using aggregated text: {error_msg}")
-                # Create fallback response with aggregated text
-                final_response = {
-                    "result": {
-                        "text": aggregated_text,
-                        "source": "fallback_despite_error",
-                        "final_response": False,
-                        "original_error": error_msg
-                    }
-                }
-                self.logger.info(f"Created fallback response with aggregated text ({len(aggregated_text)} chars)")
-            else:
-                self.logger.error(f"Gemini ACP error occurred with no content available: {error_msg}")
-                # Return empty response with error info
-                final_response = {
-                    "result": {
-                        "text": "",
-                        "source": "error_fallback",
-                        "final_response": False,
-                        "original_error": error_msg
-                    }
-                }
+        await self._write_raw(json.dumps(payload) + "\n")
 
-        # Check if the result contains the response directly
-        if final_response and "result" in final_response:
-            result_data = final_response["result"]
-            self.logger.debug(f"Final result data: {result_data}")
-            if "response" in result_data:
-                if isinstance(result_data["response"], str):
-                    aggregated_text = result_data["response"]
-                    self.logger.debug(f"Found text in result.response (string): {len(aggregated_text)} chars")
-                elif isinstance(result_data["response"], dict) and "text" in result_data["response"]:
-                    aggregated_text = result_data["response"]["text"]
-                    self.logger.debug(f"Found text in result.response.text: {len(aggregated_text)} chars")
-            elif "text" in result_data:
-                aggregated_text = result_data["text"]
-                self.logger.debug(f"Found text in result.text: {len(aggregated_text)} chars")
+    def _auto_grant_permission(self, params: JsonDict) -> JsonDict:
+        options = params.get("options", [])
+        if not options:
+            return {"outcome": {"outcome": "cancelled"}}
 
-        return final_response, aggregated_text
+        selected = options[0]
+        option_id = selected.get("optionId")
+        if not option_id:
+            return {"outcome": {"outcome": "cancelled"}}
+
+        return {"outcome": {"outcome": "selected", "optionId": option_id}}
+
+    def _handle_notification(self, message: JsonDict, collected_chunks: Optional[List[str]]):
+        method = message.get("method")
+        params = message.get("params", {})
+
+        if method == "session/update":
+            update = params.get("update", {})
+            update_type = update.get("sessionUpdate")
+            content = update.get("content")
+
+            if update_type == "agent_message_chunk":
+                if collected_chunks is not None:
+                    text = self._extract_text(content)
+                    if text:
+                        collected_chunks.append(text)
+            elif update_type == "agent_thought_chunk":
+                text = self._extract_text(content)
+                if text:
+                    self.logger.debug("Agent thought: %s", text)
 
     async def _send_notification(self, method: str, params: JsonDict):
-        """Send a JSON-RPC notification (no response expected)."""
-        if not self.process or not self.process.stdin:
-            raise RuntimeError("Process not available for writing")
-
-        notification = {
+        message = {
             "jsonrpc": "2.0",
             "method": method,
-            "params": params
+            "params": params,
         }
+        await self._write_message(message, expect_response=False)
 
-        notification_json = json.dumps(notification) + "\n"
-        self.process.stdin.write(notification_json.encode('utf-8'))
+    async def _write_message(self, message: JsonDict, expect_response: bool = True):
+        if not self.process or not self.process.stdin:
+            raise RuntimeError("Qwen ACP process stdin is not available.")
+        await self._write_raw(json.dumps(message) + "\n")
+        if expect_response:
+            self.logger.debug("Message written: %s", message.get("method"))
+
+    async def _write_raw(self, payload: str):
+        assert self.process and self.process.stdin
+        self.process.stdin.write(payload.encode("utf-8"))
         await self.process.stdin.drain()
 
+    async def _read_message(self) -> Optional[JsonDict]:
+        if not self.process or not self.process.stdout:
+            raise RuntimeError("Qwen ACP process stdout is not available.")
+
+        while True:
+            raw = await self.process.stdout.readline()
+            if not raw:
+                return None
+
+            text = raw.decode("utf-8").strip()
+            if not text:
+                continue
+
+            try:
+                message = json.loads(text)
+                self.logger.debug(
+                    "Received message: %s",
+                    message.get("method") or message.get("id"),
+                )
+                return message
+            except json.JSONDecodeError:
+                self.logger.warning("Failed to decode JSON line from Qwen: %s", text)
+
     def _prepare_command_args(self, command: str) -> List[str]:
-        """Prepare command arguments, handling shell quoting."""
-        try:
-            # Use shlex to properly parse the command
-            args = shlex.split(command)
-        except ValueError:
-            # Fallback: simple split if shlex fails
-            args = command.split()
+        args = shlex.split(command)
+        if not args:
+            args = shlex.split(self.DEFAULT_COMMAND)
 
-        # Ensure the command exists
-        if args and not os.path.isfile(args[0]) and not shutil.which(args[0]):
-            # Try to find gemini in PATH
-            gemini_path = shutil.which("gemini")
-            if gemini_path:
-                args[0] = gemini_path
-
+        if "--experimental-acp" not in args:
+            args.append("--experimental-acp")
         return args
+
+    def _next_message_id(self) -> int:
+        self.message_id += 1
+        return self.message_id
+
+    @staticmethod
+    def _extract_text(content: Any) -> str:
+        if isinstance(content, dict):
+            return content.get("text") or ""
+        if isinstance(content, list):
+            fragments = [chunk.get("text") for chunk in content if isinstance(chunk, dict) and chunk.get("text")]
+            return "".join(fragments)
+        return ""
+
+    def _get_clean_env(self) -> Dict[str, str]:
+        env = os.environ.copy()
+        for var in [
+            "HTTP_PROXY",
+            "HTTPS_PROXY",
+            "ALL_PROXY",
+            "NO_PROXY",
+            "http_proxy",
+            "https_proxy",
+            "all_proxy",
+            "no_proxy",
+        ]:
+            env.pop(var, None)
+        return env
