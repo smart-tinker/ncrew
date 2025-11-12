@@ -81,6 +81,11 @@ class TelegramBot:
             await self.ncrew.initialize()
             self.logger.info("NeuroCrew Lab initialized successfully")
 
+    async def run_startup_introductions(self):
+        """Triggers the agent introduction sequence at startup."""
+        if self.ncrew:
+            await self.ncrew.perform_startup_introductions(self.application.bot)
+
     def _is_target_chat(self, chat_id: int) -> bool:
         """Check if message is from the target chat."""
         if Config.TARGET_CHAT_ID == 0:

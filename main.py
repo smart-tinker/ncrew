@@ -90,6 +90,11 @@ async def async_main():
     await bot_instance._ensure_ncrew_initialized()
     logger.info("NeuroCrewLab initialization completed")
 
+    # Perform startup introductions
+    logger.info("Performing startup agent introductions...")
+    await bot_instance.run_startup_introductions()
+    logger.info("Startup agent introductions completed")
+
     # Graceful shutdown function with timeout
     async def graceful_shutdown():
         """Perform graceful shutdown of all components with timeout."""
