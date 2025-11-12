@@ -2,22 +2,29 @@ from functools import wraps
 import os
 import re
 import yaml
-from flask import Flask, Response, render_template, request, redirect, url_for
+from flask import Flask, Response, render_template, request, redirect, url_for, jsonify
 from dotenv import load_dotenv, find_dotenv, set_key
+from pathlib import Path
 
 load_dotenv()
 
 app = Flask(__name__)
 
 
-def _sanitize_bot_name(raw_value: str, fallback: str) -> str:
-    """Normalize bot name to contain only alphanumerics/underscores."""
-    candidate = (raw_value or "").strip() or fallback
-    candidate = re.sub(r"[^A-Za-z0-9_]+", "_", candidate)
+def _sanitize_bot_name(role_name: str) -> str:
+    """Normalize bot name from role name and add _Bot suffix."""
+    if not role_name:
+        return "New_Role_Bot"
+    # Normalize to contain only alphanumerics/underscores
+    candidate = re.sub(r"[^A-Za-z0-9_]+", "_", role_name.strip())
+    # Collapse multiple underscores and strip leading/trailing ones
     candidate = re.sub(r"_+", "_", candidate).strip("_")
     if not candidate:
-        candidate = fallback.strip().upper().replace("-", "_")
-    return candidate or "ROLE_BOT"
+        candidate = "New_Role"
+    # Add _Bot suffix if it's not there
+    if not candidate.lower().endswith("_bot"):
+        candidate += "_Bot"
+    return candidate
 
 # --- Auth ---
 def check_auth(username, password):
@@ -86,7 +93,6 @@ def save():
     roles = []
     role_names = request.form.getlist('role_name')
     display_names = request.form.getlist('display_name')
-    bot_names = request.form.getlist('telegram_bot_name')
     prompt_files = request.form.getlist('system_prompt_file')
     agent_types = request.form.getlist('agent_type')
     cli_commands = request.form.getlist('cli_command')
@@ -97,7 +103,7 @@ def save():
 
     for i in range(total_roles):
         role_name = role_names[i]
-        telegram_bot_name = _sanitize_bot_name(bot_names[i] if i < len(bot_names) else "", role_name)
+        telegram_bot_name = _sanitize_bot_name(role_name)
 
         role = {
             'role_name': role_name,
@@ -119,6 +125,50 @@ def save():
 
     return redirect(url_for('index'))
 
+@app.route('/prompt', methods=['GET'])
+@requires_auth
+def get_prompt():
+    filepath = request.args.get('filepath')
+    if not filepath:
+        return jsonify({"error": "Filepath is required"}), 400
+
+    try:
+        # Basic security check to prevent directory traversal
+        base_dir = Path.cwd()
+        full_path = (base_dir / filepath).resolve()
+        if not full_path.is_relative_to(base_dir):
+            return jsonify({"error": "Invalid filepath"}), 400
+
+        with open(full_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        return jsonify({"content": content})
+    except FileNotFoundError:
+        return jsonify({"error": "File not found"}), 404
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/prompt', methods=['POST'])
+@requires_auth
+def save_prompt():
+    data = request.json
+    filepath = data.get('filepath')
+    content = data.get('content')
+
+    if not filepath or content is None:
+        return jsonify({"error": "Filepath and content are required"}), 400
+
+    try:
+        # Basic security check
+        base_dir = Path.cwd()
+        full_path = (base_dir / filepath).resolve()
+        if not full_path.is_relative_to(base_dir):
+            return jsonify({"error": "Invalid filepath"}), 400
+
+        with open(full_path, 'w', encoding='utf-8') as f:
+            f.write(content)
+        return jsonify({"message": "File saved successfully"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 def run_web_server():
     app.run(host='0.0.0.0', port=8080)

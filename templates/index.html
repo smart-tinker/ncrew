@@ -1,70 +1,224 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ru">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NeuroCrew Lab - Settings</title>
+    <title>NeuroCrew Lab - Настройки</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        body { font-family: sans-serif; }
-        .container { max-width: 800px; margin: 0 auto; padding: 20px; }
-        .role { border: 1px solid #ccc; padding: 10px; margin-bottom: 10px; cursor: move; }
-        .role-header { display: flex; justify-content: space-between; align-items: center; }
-        .role-body { margin-top: 10px; }
-        .form-group { margin-bottom: 10px; }
-        label { display: block; margin-bottom: 5px; }
-        input, textarea { width: 100%; padding: 8px; box-sizing: border-box; }
-        .btn { padding: 10px 15px; border: none; background-color: #007bff; color: white; cursor: pointer; }
-        .btn-danger { background-color: #dc3545; }
+        :root {
+            --bg-color: #f8f9fa;
+            --text-color: #212529;
+            --card-bg: #ffffff;
+            --border-color: #dee2e6;
+            --primary-color: #007bff;
+            --secondary-color: #6c757d;
+            --danger-color: #dc3545;
+            --header-bg: #e9ecef;
+        }
+        body.dark-mode {
+            --bg-color: #212529;
+            --text-color: #f8f9fa;
+            --card-bg: #343a40;
+            --border-color: #495057;
+            --header-bg: #495057;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            line-height: 1.5;
+            margin: 0;
+            padding: 0;
+        }
+        .container { max-width: 960px; margin: 0 auto; padding: 20px; }
+        h1 { text-align: center; margin-bottom: 2rem; }
+        .role {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            margin-bottom: 1.5rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            cursor: move;
+        }
+        .role-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 1.5rem;
+            background-color: var(--header-bg);
+            border-bottom: 1px solid var(--border-color);
+            border-top-left-radius: 8px;
+            border-top-right-radius: 8px;
+        }
+        .role-name { margin: 0; font-size: 1.25rem; }
+        .role-body { padding: 1.5rem; }
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1rem;
+        }
+        .form-group { margin-bottom: 1rem; }
+        .form-group.full-width { grid-column: 1 / -1; }
+        label { display: block; margin-bottom: 0.5rem; font-weight: 600; }
+        input, select, textarea {
+            width: 100%;
+            padding: 0.75rem;
+            box-sizing: border-box;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+        }
+        .input-group {
+            display: flex;
+        }
+        .input-group input {
+            border-top-right-radius: 0;
+            border-bottom-right-radius: 0;
+            flex-grow: 1;
+        }
+        .input-group .btn {
+            border-top-left-radius: 0;
+            border-bottom-left-radius: 0;
+        }
+        textarea { resize: vertical; min-height: 100px; }
+        .btn {
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .btn-primary { background-color: var(--primary-color); color: white; }
+        .btn-secondary { background-color: var(--secondary-color); color: white; }
+        .btn-danger { background-color: var(--danger-color); color: white; }
+        .actions { text-align: center; margin-top: 2rem; }
+        .dark-mode-toggle {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            cursor: pointer;
+        }
+        /* Modal Styles */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0,0,0,0.6);
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-content {
+            background-color: var(--card-bg);
+            margin: auto;
+            padding: 20px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            width: 80%;
+            max-width: 700px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            display: flex;
+            flex-direction: column;
+        }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 1rem; margin-bottom: 1rem; }
+        .modal-header h2 { margin: 0; }
+        .close-button { color: #aaa; font-size: 28px; font-weight: bold; cursor: pointer; }
+        .modal-body { flex-grow: 1; }
+        #prompt-editor { height: 400px; }
+        .modal-footer { text-align: right; border-top: 1px solid var(--border-color); padding-top: 1rem; margin-top: 1rem; }
+        .modal-footer .btn { margin-left: 0.5rem; }
+
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>NeuroCrew Lab - Settings</h1>
+        <div class="dark-mode-toggle" onclick="toggleDarkMode()">
+            <i class="fas fa-moon"></i>
+        </div>
+        <h1><i class="fas fa-cog"></i> NeuroCrew Lab - Настройки</h1>
         <form action="/save" method="post" id="roles-form">
             <div id="roles-container">
                 {% for role in roles %}
                 <div class="role" data-id="{{ loop.index0 }}">
                     <div class="role-header">
                         <h3 class="role-name">{{ role.role_name }}</h3>
-                        <button type="button" class="btn btn-danger" onclick="removeRole(this)">Remove</button>
+                        <button type="button" class="btn btn-danger" onclick="removeRole(this)"><i class="fas fa-trash"></i></button>
                     </div>
                     <div class="role-body">
                         <input type="hidden" name="role_name" value="{{ role.role_name }}">
-                        <div class="form-group">
-                            <label>Display Name</label>
-                            <input type="text" name="display_name" value="{{ role.display_name }}">
-                        </div>
-                        <div class="form-group">
-                            <label>System Prompt File</label>
-                        <input type="text" name="system_prompt_file" value="{{ role.system_prompt_file }}">
-                    </div>
-                    <div class="form-group">
-                        <label>Agent Type</label>
-                        <input type="text" name="agent_type" value="{{ role.agent_type }}">
-                    </div>
-                    <div class="form-group">
-                        <label>CLI Command</label>
-                        <input type="text" name="cli_command" value="{{ role.cli_command }}">
-                    </div>
-                    <div class="form-group">
-                        <label>Telegram Bot Name</label>
-                        <input type="text" name="telegram_bot_name" value="{{ role.telegram_bot_name }}" placeholder="Software_Dev_Bot">
-                    </div>
-                    <div class="form-group">
-                        <label>Description</label>
-                        <textarea name="description">{{ role.description }}</textarea>
-                    </div>
-                    <div class="form-group">
-                            <label>Telegram Bot Token</label>
-                            <input type="text" name="telegram_bot_token" value="{{ role.telegram_bot_token }}">
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label>Отображаемое имя</label>
+                                <input type="text" name="display_name" value="{{ role.display_name }}">
+                            </div>
+                            <div class="form-group">
+                                <label>Файл системного промпта</label>
+                                <div class="input-group">
+                                    <input type="text" name="system_prompt_file" value="{{ role.system_prompt_file }}">
+                                    <button type="button" class="btn btn-secondary" id="edit-prompt-btn-{{ loop.index0 }}" onclick="editPrompt(this)">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label>Тип агента</label>
+                                <select name="agent_type" onchange="updateCliCommand(this)">
+                                    <option value="gemini_acp" {% if role.agent_type == 'gemini_acp' %}selected{% endif %}>Gemini (ACP)</option>
+                                    <option value="opencode_acp" {% if role.agent_type == 'opencode_acp' %}selected{% endif %}>OpenCode (ACP)</option>
+                                    <option value="qwen_acp" {% if role.agent_type == 'qwen_acp' %}selected{% endif %}>Qwen (ACP)</option>
+                                    <option value="openai_sdk" {% if role.agent_type == 'openai_sdk' %}selected{% endif %}>OpenAI (SDK)</option>
+                                    <option value="anthropic_sdk" {% if role.agent_type == 'anthropic_sdk' %}selected{% endif %}>Anthropic (SDK)</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>CLI команда</label>
+                                <input type="text" name="cli_command" value="{{ role.cli_command }}">
+                            </div>
+                            <div class="form-group">
+                                <label>Токен Telegram бота</label>
+                                <input type="text" name="telegram_bot_token" value="{{ role.telegram_bot_token }}">
+                            </div>
+                            <div class="form-group full-width">
+                                <label>Описание</label>
+                                <textarea name="description">{{ role.description }}</textarea>
+                            </div>
                         </div>
                     </div>
                 </div>
                 {% endfor %}
             </div>
-            <button type="button" class="btn" onclick="addRole()">Add Role</button>
-            <button type="submit" class="btn">Save & Reload</button>
+            <div class="actions">
+                <button type="button" class="btn btn-primary" onclick="addRole()"><i class="fas fa-plus"></i> Добавить роль</button>
+                <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Сохранить и перезагрузить</button>
+            </div>
         </form>
+    </div>
+
+    <!-- Prompt Editor Modal -->
+    <div id="prompt-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="prompt-modal-title">Редактировать системный промпт</h2>
+                <span class="close-button" onclick="closePromptModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="prompt-filepath-hidden">
+                <textarea id="prompt-editor" class="full-width"></textarea>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closePromptModal()">Отмена</button>
+                <button type="button" class="btn btn-primary" onclick="savePrompt()"><i class="fas fa-save"></i> Сохранить</button>
+            </div>
+        </div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
@@ -75,92 +229,162 @@
             ghostClass: 'blue-background-class'
         });
 
-        function generateBotName(roleName) {
-            if (!roleName) return 'New_Role_Bot';
-            let normalized = roleName.trim().replace(/[^A-Za-z0-9_]+/g, '_');
-            normalized = normalized.replace(/_+/g, '_').replace(/^_|_$/g, '');
-            if (!normalized) {
-                normalized = 'New_Role';
+        const defaultCliCommands = {
+            'gemini_acp': 'gemini --experimental-acp',
+            'opencode_acp': 'opencode --experimental-acp',
+            'qwen_acp': 'qwen --experimental-acp'
+        };
+
+        function updateCliCommand(selectElement) {
+            const agentType = selectElement.value;
+            const cliCommandInput = selectElement.closest('.role-body').querySelector('[name="cli_command"]');
+            if (defaultCliCommands[agentType]) {
+                cliCommandInput.value = defaultCliCommands[agentType];
             }
-            if (!/_bot$/i.test(normalized)) {
-                normalized = normalized + '_Bot';
-            }
-            return normalized;
         }
 
         function addRole() {
-            const roleName = prompt('Enter a unique role name:');
+            const roleName = prompt('Введите уникальное имя роли:');
             if (roleName && !document.querySelector(`[name="role_name"][value="${roleName}"]`)) {
-                const suggestedBotName = generateBotName(roleName);
-                const botName = prompt('Enter Telegram bot name (used for *_TOKEN variables):', suggestedBotName) || suggestedBotName;
                 const newRole = document.createElement('div');
                 newRole.className = 'role';
                 newRole.innerHTML = `
                     <div class="role-header">
                         <h3 class="role-name">${roleName}</h3>
-                        <button type="button" class="btn btn-danger" onclick="removeRole(this)">Remove</button>
+                        <button type="button" class="btn btn-danger" onclick="removeRole(this)"><i class="fas fa-trash"></i></button>
                     </div>
                     <div class="role-body">
                         <input type="hidden" name="role_name" value="${roleName}">
-                        <div class="form-group">
-                            <label>Display Name</label>
-                            <input type="text" name="display_name" value="">
-                        </div>
-                        <div class="form-group">
-                            <label>System Prompt File</label>
-                            <input type="text" name="system_prompt_file" value="">
-                        </div>
-                        <div class="form-group">
-                            <label>Agent Type</label>
-                            <input type="text" name="agent_type" value="">
-                        </div>
-                        <div class="form-group">
-                            <label>CLI Command</label>
-                            <input type="text" name="cli_command" value="">
-                        </div>
-                        <div class="form-group">
-                            <label>Telegram Bot Name</label>
-                            <input type="text" name="telegram_bot_name" value="${botName}">
-                        </div>
-                        <div class="form-group">
-                            <label>Description</label>
-                            <textarea name="description"></textarea>
-                        </div>
-                        <div class="form-group">
-                            <label>Telegram Bot Token</label>
-                            <input type="text" name="telegram_bot_token" value="">
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label>Отображаемое имя</label>
+                                <input type="text" name="display_name" value="">
+                            </div>
+                            <div class="form-group">
+                                <label>Файл системного промпта</label>
+                                <div class="input-group">
+                                    <input type="text" name="system_prompt_file" value="">
+                                    <button type="button" class="btn btn-secondary" onclick="editPrompt(this)">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label>Тип агента</label>
+                                <select name="agent_type" onchange="updateCliCommand(this)">
+                                    <option value="gemini_acp">Gemini (ACP)</option>
+                                    <option value="opencode_acp">OpenCode (ACP)</option>
+                                    <option value="qwen_acp">Qwen (ACP)</option>
+                                    <option value="openai_sdk">OpenAI (SDK)</option>
+                                    <option value="anthropic_sdk">Anthropic (SDK)</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>CLI команда</label>
+                                <input type="text" name="cli_command" value="">
+                            </div>
+                            <div class="form-group">
+                                <label>Токен Telegram бота</label>
+                                <input type="text" name="telegram_bot_token" value="">
+                            </div>
+                            <div class="form-group full-width">
+                                <label>Описание</label>
+                                <textarea name="description"></textarea>
+                            </div>
                         </div>
                     </div>
                 `;
                 rolesContainer.appendChild(newRole);
             } else if (roleName) {
-                alert('Role name must be unique.');
+                alert('Имя роли должно быть уникальным.');
             }
         }
 
         function removeRole(button) {
-            if (confirm('Are you sure you want to remove this role?')) {
+            if (confirm('Вы уверены, что хотите удалить эту роль?')) {
                 button.closest('.role').remove();
             }
         }
 
-        document.getElementById('roles-form').addEventListener('submit', function(e) {
-            const roleNames = new Set();
-            let hasDuplicates = false;
-            document.querySelectorAll('[name="role_name"]').forEach(input => {
-                if (roleNames.has(input.value)) {
-                    hasDuplicates = true;
-                }
-                roleNames.add(input.value);
-            });
-
-            if (hasDuplicates) {
-                e.preventDefault();
-                alert('Role names must be unique.');
+        function toggleDarkMode() {
+            document.body.classList.toggle('dark-mode');
+            const icon = document.querySelector('.dark-mode-toggle i');
+            if (document.body.classList.contains('dark-mode')) {
+                icon.classList.remove('fa-moon');
+                icon.classList.add('fa-sun');
+            } else {
+                icon.classList.remove('fa-sun');
+                icon.classList.add('fa-moon');
             }
-        });
+        }
+
+        const modal = document.getElementById('prompt-modal');
+        const promptEditor = document.getElementById('prompt-editor');
+        const promptFilepathHidden = document.getElementById('prompt-filepath-hidden');
+
+        async function editPrompt(button) {
+            const promptFileInput = button.previousElementSibling;
+            const filepath = promptFileInput.value;
+            if (!filepath) {
+                alert('Укажите путь к файлу системного промпта.');
+                return;
+            }
+
+            promptFilepathHidden.value = filepath;
+
+            try {
+                const response = await fetch(`/prompt?filepath=${encodeURIComponent(filepath)}`);
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.error || `HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
+                promptEditor.value = data.content;
+                modal.style.display = 'flex';
+            } catch (e) {
+                alert(`Не удалось загрузить промпт: ${e.message}`);
+            }
+        }
+
+        function closePromptModal() {
+            modal.style.display = 'none';
+        }
+
+        async function savePrompt() {
+            const filepath = promptFilepathHidden.value;
+            const content = promptEditor.value;
+
+            try {
+                const response = await fetch('/prompt', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ filepath, content }),
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.error || `HTTP error! status: ${response.status}`);
+                }
+
+                alert('Промпт успешно сохранен.');
+                closePromptModal();
+            } catch (e) {
+                alert(`Не удалось сохранить промпт: ${e.message}`);
+            }
+        }
+
+        window.onclick = function(event) {
+            if (event.target == modal) {
+                closePromptModal();
+            }
+        }
+
+        document.body.classList.add('dark-mode');
+        document.querySelector('.dark-mode-toggle i').classList.remove('fa-moon');
+        document.querySelector('.dark-mode-toggle i').classList.add('fa-sun');
 
     </script>
-
 </body>
 </html>
