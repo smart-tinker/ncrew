@@ -232,7 +232,9 @@
         const defaultCliCommands = {
             'gemini_acp': 'gemini --experimental-acp',
             'opencode_acp': 'opencode --experimental-acp',
-            'qwen_acp': 'qwen --experimental-acp'
+            'qwen_acp': 'qwen --experimental-acp',
+            'openai_sdk': 'codex',
+            'anthropic_sdk': 'claude'
         };
 
         function updateCliCommand(selectElement) {
@@ -240,6 +242,8 @@
             const cliCommandInput = selectElement.closest('.role-body').querySelector('[name="cli_command"]');
             if (defaultCliCommands[agentType]) {
                 cliCommandInput.value = defaultCliCommands[agentType];
+            } else {
+                cliCommandInput.value = '';
             }
         }
 

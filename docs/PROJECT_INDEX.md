@@ -154,11 +154,11 @@ stateDiagram-v2
 Все AI CLI агенты должны быть предварительно аутентифицированы пользователем. Приложение **не управляет** авторизацией AI провайдеров и **не хранит** API ключи.
 
 **🔌 Поддерживаемые AI провайдеры (расширяемый список):**
-- ✅ **Gemini CLI** - Google Gemini via ACP protocol
-- ✅ **Qwen CLI** - Alibaba Qwen Code via ACP protocol
-- 🚧 **Claude Code** - Anthropic Claude via CLI (планируется)
-- 🚧 **GitHub Copilot / Codex** - OpenAI Codex via CLI (планируется)
-- 🚧 **Local LLMs** - Локальные модели через CLI (планируется)
+- ✅ **Gemini CLI** - Google Gemini via ACP protocol (`gemini --experimental-acp`)
+- ✅ **Qwen CLI** - Alibaba Qwen Code via ACP protocol (`qwen --experimental-acp`)
+- ✅ **OpenCode CLI** - OpenCode via ACP protocol (`opencode --experimental-acp`)
+- ✅ **Codex CLI** - OpenAI Codex via CLI (`codex`)
+- ✅ **Claude Code** - Anthropic Claude via CLI (`claude`)
 - 🔧 **Custom connectors** - Любые другие через base.py
 
 **🔒 Важная позиция по авторизации:**
