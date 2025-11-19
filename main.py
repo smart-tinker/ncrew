@@ -12,8 +12,7 @@ import signal
 import sys
 import os
 from typing import Optional
-from urllib.request import urlopen
-from urllib.error import URLError
+import httpx
 
 # Sanitize proxy environment variables immediately
 # httpx requires 'socks5://' but some environments provide 'socks://'
@@ -53,9 +52,12 @@ def main():
 
         # Check Telegram connectivity
         try:
-            urlopen("https://api.telegram.org", timeout=3)
-        except URLError:
-            logger.error("Cannot reach api.telegram.org. Check network connectivity.")
+            # Use httpx for connectivity check as it supports SOCKS proxies (with socksio)
+            # and aligns with what the bot uses.
+            httpx.get("https://api.telegram.org", timeout=5.0)
+        except Exception as e:
+            logger.error(f"Cannot reach api.telegram.org: {e}")
+            logger.error("Check network connectivity and proxy settings.")
             return
 
         # Log role-based configuration
