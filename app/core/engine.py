@@ -35,7 +35,12 @@ class NeuroCrewLab:
             storage: File storage instance. Creates default if None.
         """
         self.storage = storage or FileStorage()
-        self.logger = get_logger(f"{self.__class__.__name__}")
+        # Configure logger to write to file
+        self.logger = setup_logger(
+            f"{self.__class__.__name__}",
+            Config.LOG_LEVEL,
+            log_file=Config.DATA_DIR / "logs" / "ncrew.log",
+        )
 
         # Role-based configuration
         self.is_role_based = Config.is_role_based_enabled()
