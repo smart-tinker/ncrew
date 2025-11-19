@@ -14,8 +14,23 @@ import os
 from typing import Optional
 import httpx
 
-# Sanitization removed to respect user network configuration
-# Users are responsible for providing correct proxy schemes (e.g. socks5://)
+# --- PROXY CONFIGURATION ---
+# Sanitize proxy environment variables immediately at startup.
+# This is the SINGLE source of truth for proxy adjustment.
+# httpx requires 'socks5://' but some environments provide 'socks://'
+for var in [
+    "HTTP_PROXY",
+    "HTTPS_PROXY",
+    "ALL_PROXY",
+    "http_proxy",
+    "https_proxy",
+    "all_proxy",
+]:
+    value = os.environ.get(var)
+    if value and value.startswith("socks://"):
+        new_value = "socks5://" + value[8:]
+        os.environ[var] = new_value
+        print(f"MAIN: Adjusted {var} from socks:// to {new_value} for compatibility")
 
 from app.config import Config
 from app.utils.logger import setup_logger
@@ -186,7 +201,19 @@ async def async_main():
                     )
                     await ensure_shutdown("configuration reload")
                     os.remove(".reload")
-                    os.execv(sys.executable, ["python"] + sys.argv)
+
+                    # Debug logging for reload process
+                    logger.info(f"RELOAD: Current PID: {os.getpid()}")
+                    logger.info(f"RELOAD: Executable: {sys.executable}")
+                    logger.info(f"RELOAD: Arguments: {sys.argv}")
+                    logger.info(
+                        f"RELOAD: Proxy Env: HTTP_PROXY={os.environ.get('HTTP_PROXY')}, HTTPS_PROXY={os.environ.get('HTTPS_PROXY')}"
+                    )
+
+                    # Re-execute the python process replacing the current one
+                    # We use "python" as arg0 (convention), and pass the script name + args
+                    # NOTE: sys.argv[0] is the script name (e.g. 'main.py')
+                    os.execv(sys.executable, [sys.executable] + sys.argv)
                 await asyncio.sleep(1)
         except asyncio.CancelledError:
             logger.info("Bot operation cancelled")
