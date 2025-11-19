@@ -35,9 +35,9 @@ User → Telegram Group → Listener Bot → NeuroCrew Core → Role Sequence �
 
 #### **🕸️ Web-конфигуратор ролей**
 ```
-web_server.py        - Flask-сервис с Basic Auth (WEB_ADMIN_USER/PASS)
-templates/index.html - Форма редактирования ролей, prompt-файлов и токенов
-.reload              - Флаг, создаваемый после сохранения для инициирования перезапуска
+app/interfaces/web_server.py - Flask-сервис с Basic Auth
+templates/index.html         - Форма редактирования
+.reload                      - Флаг перезапуска
 ```
 
 ### **Основные компоненты**
@@ -46,32 +46,28 @@ templates/index.html - Форма редактирования ролей, promp
 ```
 main.py (Entry Point)
 ├── async_main() - Lifecycle management
-├── graceful_shutdown() - Graceful termination
-└── Signal handling - Ctrl+C support
+└── graceful_shutdown() - Graceful termination
 
-ncrew.py (Business Logic)
-├── handle_message() - Message processing
+app/core/engine.py (Business Logic)
+├── handle_message() - Message processing entry point
+├── _run_autonomous_cycle() - Continuous dialogue loop
 ├── _process_with_role() - Role execution
-├── shutdown_role_sessions() - Session cleanup
-└── Continuous autonomous dialogue cycle
+└── shutdown_role_sessions() - Session cleanup
 
-telegram_bot.py (Interface)
+app/interfaces/telegram_bot.py (Interface)
 ├── handle_message() - Telegram message handling
-├── _ensure_ncrew_initialized() - Lazy initialization
-├── shutdown() - Graceful bot termination
-└── Puppet Master coordination
+└── _ensure_ncrew_initialized() - Lazy initialization
 ```
 
 #### **🔌 AI Интеграции (Расширяемая архитектура)**
 ```
-connectors/
-├── base.py                  - Базовый класс для CLI-коннекторов
+app/connectors/
+├── base.py                  - Базовый класс
 ├── opencode_acp_connector.py - OpenCode CLI via ACP
 ├── qwen_acp_connector.py     - Qwen CLI via ACP
 ├── gemini_acp_connector.py   - Gemini CLI via ACP
-├── codex_cli_connector.py    - Codex CLI (codex exec --json)
-├── claude_cli_connector.py   - Claude Code CLI (--print stream-json)
-└── [future connectors]       - Расширение для других CLI
+├── codex_cli_connector.py    - Codex CLI (headless)
+└── claude_cli_connector.py   - Claude Code CLI (headless)
 ```
 
 **🔒 Архитектурные принципы:**
@@ -98,32 +94,18 @@ roles/prompts/ - AI role definitions
 
 #### **⚙️ Конфигурация**
 ```
-config.py - Configuration management
+app/config.py - Configuration management
 ├── Config class - Global settings
 ├── RoleConfig class - Role definitions
 └── Environment variable expansion
-
-roles/agents.yaml - Role configuration
-├── 10 specialized roles
-├── Gemini ACP agent type
-└── Telegram bot mapping
-
-.env.example - Environment template
-├── Telegram tokens
-├── AI agent settings
-└── Performance parameters
 ```
 
 #### **📁 Хранение данных**
 ```
-storage/file_storage.py - File-based persistence
+app/storage/file_storage.py - File-based persistence
 ├── Conversation management
 ├── JSON-based storage
 └── Data integrity validation
-
-data/ - Runtime data
-├── conversations/chat_{id}.json - Dialog history
-└── system/ - System state and sessions
 ```
 
 ### **Continuous Autonomous Dialogue**
@@ -258,28 +240,28 @@ SOFTWAREDEVBOT_TOKEN=software_dev_token
 ### **📊 Структура проекта**
 ```
 ncrew/
-├── 🐍 main.py                 # Entry point (137 lines)
-├── 🤖 ncrew.py               # Core logic (1200+ lines)
-├── 📱 telegram_bot.py        # Telegram interface (614 lines)
-├── ⚙️ config.py              # Configuration (189 lines)
-├── 🔌 connectors/            # AI integrations (extensible)
-│   ├── base.py               # Abstract base (139 lines)
-│   ├── gemini_acp_connector.py # Gemini integration (400+ lines)
-│   ├── qwen_acp_connector.py  # Qwen integration (350+ lines)
-│   └── [future connectors]    # Easy to add new AI providers
-├── 📁 storage/               # Data persistence
-│   └── file_storage.py       # File storage (200+ lines)
-├── 🛠️ utils/                 # Utilities
-│   ├── logger.py              # Logging system
-│   ├── formatters.py          # Message formatting
-│   └── security.py            # Input validation
-├── 🤖 roles/                 # AI role definitions
-│   ├── agents.yaml           # Role configuration (110 lines)
-│   └── prompts/               # 10 role prompts (200+ lines each)
-├── 📜 scripts/               # Management utilities (9 scripts)
-├── 🧪 tests/                 # Basic tests
-├── 📚 docs/                  # Documentation
-├── 🚀 ncrew.sh               # Deployment script (289 lines)
+├── 🐍 main.py                 # Entry point
+├── ⚙️ app/                    # Main Application Package
+│   ├── 🧠 core/               # Core Business Logic
+│   │   └── engine.py          # NeuroCrewLab (Orchestrator)
+│   ├── 📱 interfaces/         # Application Interfaces
+│   │   ├── telegram_bot.py    # Telegram Bot Logic
+│   │   └── web_server.py      # Web Admin Panel
+│   ├── 🔌 connectors/         # AI Integrations
+│   │   ├── base.py            # Abstract Base Class
+│   │   ├── *_acp_connector.py # ACP Protocol Connectors
+│   │   └── *_cli_connector.py # Headless CLI Connectors
+│   ├── 📁 storage/            # Data Persistence
+│   │   └── file_storage.py    # JSON File Storage
+│   ├── 🛠️ utils/              # Utilities (Logger, Security, Formatters)
+│   └── ⚙️ config.py           # Configuration Module
+├── 🤖 roles/                  # AI role definitions (YAML/Prompts)
+├── 📁 data/                   # Runtime data (conversations, logs)
+├── 📜 scripts/                # Management utilities
+├── 🧪 tests/                  # Tests
+├── 📚 docs/                   # Documentation
+├── 🚀 ncrew.sh                # Deployment script
+├── 🖌️ templates/              # HTML Templates
 └── 📋 requirements.txt        # Dependencies
 ```
 
