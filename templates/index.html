@@ -182,7 +182,18 @@
                             </div>
                             <div class="form-group">
                                 <label>CLI команда</label>
-                                <input type="text" name="cli_command" value="{{ role.cli_command }}">
+                                <div class="input-group">
+                                    <input type="text" name="cli_command" value="{{ role.cli_command }}">
+                                    <button type="button" class="btn btn-secondary" onclick="toggleBuilder(this)" title="Конструктор опций">
+                                        <i class="fas fa-sliders-h"></i>
+                                    </button>
+                                    <button type="button" class="btn btn-danger" onclick="resetToDefault(this)" title="Сбросить к стандартным">
+                                        <i class="fas fa-undo"></i>
+                                    </button>
+                                </div>
+                                <div class="cli-builder-container" style="margin-top: 10px; padding: 15px; border: 1px solid var(--border-color); border-radius: 4px; background-color: var(--bg-color); display: none;">
+                                    <!-- Builder content will be rendered here -->
+                                </div>
                             </div>
                             <div class="form-group">
                                 <label>Токен Telegram бота</label>
@@ -227,24 +238,268 @@
         const rolesContainer = document.getElementById('roles-container');
         let sortable = new Sortable(rolesContainer, {
             animation: 150,
-            ghostClass: 'blue-background-class'
+            ghostClass: 'blue-background-class',
+            handle: '.role-header' // Only drag by header
         });
 
-        const defaultCliCommands = {
-            'gemini_acp': 'gemini --experimental-acp',
-            'opencode_acp': 'opencode acp',
-            'qwen_acp': 'qwen --experimental-acp',
-            'codex_cli': 'codex exec --json --full-auto --sandbox workspace-write --skip-git-repo-check',
-            'claude_cli': 'claude -p --output-format stream-json --permission-mode bypassPermissions --dangerously-skip-permissions --verbose'
+        const CLI_CONFIG = {
+            'codex_cli': {
+                base: 'codex exec',
+                options: [
+                    { type: 'flag', flag: '--json', label: 'JSON Output', required: true, checked: true, description: 'Output in JSON format' },
+                    { type: 'flag', flag: '--full-auto', label: 'Full Auto', checked: true, description: 'Auto-approve safe actions' },
+                    { type: 'flag', flag: '--skip-git-repo-check', label: 'Skip Git Check', checked: true, description: 'Allow running outside git repo' },
+                    { 
+                        type: 'select', 
+                        flag: '--sandbox', 
+                        label: 'Sandbox Mode', 
+                        values: [
+                            { value: 'workspace-write', label: 'Workspace Write (Default)' },
+                            { value: 'read-only', label: 'Read Only' },
+                            { value: 'danger-full-access', label: 'Danger: Full Access' }
+                        ], 
+                        default: 'workspace-write',
+                        description: 'Sandbox security level'
+                    },
+                    { 
+                        type: 'select', 
+                        flag: '-a', 
+                        label: 'Approval Policy', 
+                        values: [
+                            { value: '', label: 'Default (based on sandbox)' },
+                            { value: 'never', label: 'Never Ask (Fully Autonomous)' },
+                            { value: 'on-failure', label: 'On Failure' },
+                            { value: 'on-request', label: 'On Request' }
+                        ], 
+                        default: '',
+                        description: 'When to ask for user approval'
+                    },
+                    { type: 'flag', flag: '--verbose', label: 'Verbose Logging', checked: false, description: 'Enable detailed logs' }
+                ]
+            },
+            'claude_cli': {
+                base: 'claude -p',
+                options: [
+                    { type: 'flag', flag: '--output-format stream-json', label: 'Stream JSON', required: true, checked: true, description: 'Required output format' },
+                    { type: 'flag', flag: '--verbose', label: 'Verbose', checked: true, description: 'Detailed logging' },
+                    { type: 'flag', flag: '--dangerously-skip-permissions', label: 'Skip Permissions', checked: true, description: 'Bypass permission checks (Required for autonomous mode)' },
+                    { 
+                        type: 'select', 
+                        flag: '--permission-mode', 
+                        label: 'Permission Mode', 
+                        values: [
+                            { value: 'bypassPermissions', label: 'Bypass Permissions' },
+                            { value: 'dontAsk', label: 'Don\'t Ask' },
+                            { value: 'default', label: 'Default' }
+                        ], 
+                        default: 'bypassPermissions',
+                        description: 'Permission handling strategy'
+                    }
+                ]
+            },
+            'qwen_acp': {
+                base: 'qwen',
+                options: [
+                    { type: 'flag', flag: '--experimental-acp', label: 'ACP Mode', required: true, checked: true, description: 'Enable Agent Client Protocol' },
+                    { type: 'flag', flag: '--debug', label: 'Debug Mode', checked: false, description: 'Enable debug output' },
+                    { type: 'flag', flag: '--yolo', label: 'YOLO Mode', checked: false, description: 'Auto-accept all actions' },
+                    { 
+                        type: 'select', 
+                        flag: '--approval-mode', 
+                        label: 'Approval Mode', 
+                        values: [
+                            { value: 'default', label: 'Default (Prompt)' },
+                            { value: 'auto-edit', label: 'Auto Edit' },
+                            { value: 'yolo', label: 'YOLO (Auto All)' }
+                        ], 
+                        default: 'default',
+                        description: 'Action approval strategy'
+                    }
+                ]
+            },
+            'gemini_acp': {
+                base: 'gemini',
+                options: [
+                    { type: 'flag', flag: '--experimental-acp', label: 'ACP Mode', required: true, checked: true, description: 'Enable Agent Client Protocol' },
+                    { type: 'flag', flag: '--debug', label: 'Debug Mode', checked: false, description: 'Enable debug output' },
+                    { type: 'flag', flag: '--yolo', label: 'YOLO Mode', checked: false, description: 'Auto-accept all actions' },
+                    { 
+                        type: 'select', 
+                        flag: '--approval-mode', 
+                        label: 'Approval Mode', 
+                        values: [
+                            { value: 'default', label: 'Default (Prompt)' },
+                            { value: 'auto_edit', label: 'Auto Edit' },
+                            { value: 'yolo', label: 'YOLO (Auto All)' }
+                        ], 
+                        default: 'default',
+                        description: 'Action approval strategy'
+                    }
+                ]
+            },
+            'opencode_acp': {
+                base: 'opencode acp',
+                options: [
+                    { type: 'flag', flag: '--print-logs', label: 'Print Logs', checked: false, description: 'Print logs to stderr' },
+                    { 
+                        type: 'select', 
+                        flag: '--log-level', 
+                        label: 'Log Level', 
+                        values: [
+                            { value: '', label: 'Default' },
+                            { value: 'DEBUG', label: 'DEBUG' },
+                            { value: 'INFO', label: 'INFO' },
+                            { value: 'WARN', label: 'WARN' },
+                            { value: 'ERROR', label: 'ERROR' }
+                        ], 
+                        default: '',
+                        description: 'Logging verbosity'
+                    }
+                ]
+            }
         };
+
+        function toggleBuilder(button) {
+            const container = button.closest('.form-group').querySelector('.cli-builder-container');
+            const roleBody = button.closest('.role-body');
+            const agentType = roleBody.querySelector('[name="agent_type"]').value;
+            
+            if (container.style.display === 'none') {
+                renderBuilder(agentType, container);
+                container.style.display = 'block';
+                button.innerHTML = '<i class="fas fa-times"></i> Скрыть опции';
+            } else {
+                container.style.display = 'none';
+                button.innerHTML = '<i class="fas fa-sliders-h"></i> Опции';
+            }
+        }
+
+        function renderBuilder(agentType, container) {
+            const config = CLI_CONFIG[agentType];
+            if (!config) {
+                container.innerHTML = '<p class="text-muted">Для этого агента нет доступных опций настройки.</p>';
+                return;
+            }
+
+            const currentCommand = container.closest('.form-group').querySelector('[name="cli_command"]').value;
+            
+            let html = '<div class="builder-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px;">';
+            
+            config.options.forEach((opt, index) => {
+                if (opt.type === 'flag') {
+                    const isChecked = currentCommand.includes(opt.flag) || (opt.required && !currentCommand) || (opt.checked && !currentCommand);
+                    const disabled = opt.required ? 'disabled' : '';
+                    const title = opt.description || '';
+                    
+                    html += `
+                        <div class="builder-item" title="${title}">
+                            <label style="font-weight: normal; cursor: pointer; display: flex; align-items: center;">
+                                <input type="checkbox" 
+                                    data-flag="${opt.flag}" 
+                                    ${isChecked ? 'checked' : ''} 
+                                    ${disabled}
+                                    onchange="updateCommandString(this.closest('.cli-builder-container'))"
+                                    style="width: auto; margin-right: 8px;">
+                                ${opt.label}
+                                ${opt.required ? '<span style="color: red; margin-left: 4px;">*</span>' : ''}
+                            </label>
+                        </div>
+                    `;
+                } else if (opt.type === 'select') {
+                    // Simple parsing to find selected value in current command
+                    let selectedValue = opt.default;
+                    // Regex to find flag value: --flag value or --flag=value
+                    // This is a basic heuristic
+                    if (currentCommand) {
+                        const regex = new RegExp(`${opt.flag}[=\\s]+([^\\s]+)`);
+                        const match = currentCommand.match(regex);
+                        if (match) {
+                            selectedValue = match[1];
+                        }
+                    }
+
+                    html += `
+                        <div class="builder-item" title="${opt.description || ''}">
+                            <label style="font-size: 0.85rem; margin-bottom: 2px;">${opt.label}</label>
+                            <select 
+                                data-flag="${opt.flag}" 
+                                onchange="updateCommandString(this.closest('.cli-builder-container'))"
+                                style="padding: 4px; font-size: 0.9rem;">
+                                <option value="">(Не задано)</option>
+                                ${opt.values.map(v => `
+                                    <option value="${v.value}" ${v.value === selectedValue ? 'selected' : ''}>${v.label}</option>
+                                `).join('')}
+                            </select>
+                        </div>
+                    `;
+                }
+            });
+            
+            html += '</div>';
+            container.innerHTML = html;
+        }
+
+        function updateCommandString(container) {
+            const roleBody = container.closest('.role-body');
+            const agentType = roleBody.querySelector('[name="agent_type"]').value;
+            const config = CLI_CONFIG[agentType];
+            const input = roleBody.querySelector('[name="cli_command"]');
+            
+            if (!config) return;
+
+            let commandParts = [config.base];
+            
+            // Process flags
+            container.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+                if (cb.checked) {
+                    commandParts.push(cb.dataset.flag);
+                }
+            });
+
+            // Process selects
+            container.querySelectorAll('select').forEach(sel => {
+                if (sel.value) {
+                    commandParts.push(sel.dataset.flag);
+                    commandParts.push(sel.value);
+                }
+            });
+
+            input.value = commandParts.join(' ');
+        }
+
+        function resetToDefault(button) {
+            if (!confirm('Сбросить команду к рекомендованным настройкам?')) return;
+            
+            const roleBody = button.closest('.role-body');
+            const selectElement = roleBody.querySelector('[name="agent_type"]');
+            
+            // This re-triggers the update logic which applies defaults
+            updateCliCommand(selectElement);
+        }
 
         function updateCliCommand(selectElement) {
             const agentType = selectElement.value;
-            const cliCommandInput = selectElement.closest('.role-body').querySelector('[name="cli_command"]');
-            if (defaultCliCommands[agentType]) {
-                cliCommandInput.value = defaultCliCommands[agentType];
+            const roleBody = selectElement.closest('.role-body');
+            const cliCommandInput = roleBody.querySelector('[name="cli_command"]');
+            const container = roleBody.querySelector('.cli-builder-container');
+            
+            // Reset command to default constructed string
+            // We do this by rendering the builder with "empty" current command context
+            // ensuring defaults from config are applied
+            if (CLI_CONFIG[agentType]) {
+                // Temporarily clear input to force defaults in renderBuilder
+                const oldVal = cliCommandInput.value;
+                cliCommandInput.value = ''; 
+                renderBuilder(agentType, container);
+                updateCommandString(container);
             } else {
                 cliCommandInput.value = '';
+                container.innerHTML = '';
+            }
+            
+            // If builder was open, refresh it
+            if (container.style.display !== 'none') {
+                renderBuilder(agentType, container);
             }
         }
 
@@ -302,8 +557,18 @@
                                 </select>
                             </div>
                             <div class="form-group">
-                                <label>CLI команда</label>
-                                <input type="text" name="cli_command" value="">
+                                <div class="input-group">
+                                    <input type="text" name="cli_command" value="">
+                                    <button type="button" class="btn btn-secondary" onclick="toggleBuilder(this)" title="Конструктор опций">
+                                        <i class="fas fa-sliders-h"></i>
+                                    </button>
+                                    <button type="button" class="btn btn-danger" onclick="resetToDefault(this)" title="Сбросить к стандартным">
+                                        <i class="fas fa-undo"></i>
+                                    </button>
+                                </div>
+                                <div class="cli-builder-container" style="margin-top: 10px; padding: 15px; border: 1px solid var(--border-color); border-radius: 4px; background-color: var(--bg-color); display: none;">
+                                    <!-- Builder content will be rendered here -->
+                                </div>
                             </div>
                             <div class="form-group">
                                 <label>Токен Telegram бота</label>
