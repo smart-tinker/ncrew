@@ -41,11 +41,7 @@ class TelegramBot:
 
     def __init__(self):
         """Initialize the Telegram bot."""
-        self.logger = setup_logger(
-            f"{self.__class__.__name__}",
-            Config.LOG_LEVEL,
-            log_file=Config.DATA_DIR / "logs" / "ncrew.log",
-        )
+        self.logger = setup_logger(f"{self.__class__.__name__}", Config.LOG_LEVEL)
         self.ncrew = None  # Will be initialized asynchronously
 
         try:

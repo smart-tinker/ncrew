@@ -42,6 +42,19 @@ logger = setup_logger(
     log_file=Config.DATA_DIR / "logs" / "ncrew.log",
 )
 
+# Configure other key loggers to write to the same file
+setup_logger(
+    "TelegramBot",
+    Config.LOG_LEVEL,
+    log_file=Config.DATA_DIR / "logs" / "ncrew.log",
+)
+# ncrew.NeuroCrewLab gets its logger via get_logger("NeuroCrewLab"), which returns "ncrew.NeuroCrewLab"
+setup_logger(
+    "ncrew.NeuroCrewLab",
+    Config.LOG_LEVEL,
+    log_file=Config.DATA_DIR / "logs" / "ncrew.log",
+)
+
 
 def main():
     """Main entry point for the application."""
