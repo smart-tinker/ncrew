@@ -26,6 +26,7 @@ class ClaudeCLICodeConnector(BaseConnector):
         self.session_id: str | None = None
         self.system_prompt: str = ""
         self._initialized: bool = False
+        self._session_created: bool = False
 
     def is_alive(self) -> bool:  # type: ignore[override]
         return self._initialized
@@ -35,6 +36,7 @@ class ClaudeCLICodeConnector(BaseConnector):
         self.system_prompt = system_prompt.strip()
         self.session_id = str(uuid.uuid4())
         self._initialized = True
+        self._session_created = False
         await self._prime_session()
 
     async def execute(self, delta_prompt: str) -> str:
@@ -54,6 +56,7 @@ class ClaudeCLICodeConnector(BaseConnector):
     async def shutdown(self):
         self.session_id = None
         self._initialized = False
+        self._session_created = False
 
     def check_availability(self) -> bool:  # type: ignore[override]
         import shutil
@@ -73,92 +76,92 @@ class ClaudeCLICodeConnector(BaseConnector):
             pass
 
     async def _run_claude(self, prompt: str) -> str:
-        max_retries = 2
-        for attempt in range(max_retries):
-            args: List[str] = shlex.split(self.base_command)
-            if "--session-id" not in args and self.session_id:
-                args += ["--session-id", self.session_id]
-            elif self.session_id:
-                # Replace existing session id to ensure we control the session
+        args: List[str] = shlex.split(self.base_command)
+
+        # Session management logic:
+        # 1. First call uses --session-id to create the session
+        # 2. Subsequent calls use --resume to continue the session
+        # 3. If session creation failed previously, fallback to --session-id
+        if self.session_id:
+            # Remove any existing session args from base command
+            if "--session-id" in args:
                 try:
-                    index = args.index("--session-id")
-                    args[index + 1] = self.session_id
-                except (ValueError, IndexError):
-                    args += ["--session-id", self.session_id]
+                    idx = args.index("--session-id")
+                    args.pop(idx)  # remove flag
+                    if idx < len(args) and not args[idx].startswith("-"):
+                        args.pop(idx)  # remove value
+                except IndexError:
+                    pass
+            if "--resume" in args:
+                try:
+                    idx = args.index("--resume")
+                    args.pop(idx)
+                    if idx < len(args) and not args[idx].startswith("-"):
+                        args.pop(idx)
+                except IndexError:
+                    pass
 
-            args.append(prompt)
+            # Add correct flag
+            if self._session_created:
+                args += ["--resume", self.session_id]
+            else:
+                args += ["--session-id", self.session_id]
 
+        args.append(prompt)
+
+        process = await asyncio.create_subprocess_exec(
+            *args,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            cwd=os.getcwd(),
+            env=os.environ.copy(),
+            limit=2 * 1024 * 1024,  # 2MB limit for large JSON responses
+        )
+        stdout, stderr = await process.communicate()
+
+        if process.returncode != 0:
+            error = (
+                stderr.decode().strip() or stdout.decode().strip() or "unknown error"
+            )
+
+            # Handle specific case where session might be locked but we want to force usage
+            # OR if --resume fails because session was lost/cleaned up
+            # If --resume failed, we might want to reset _session_created and try again with --session-id?
+            # But for now, let's just report the error to be safe.
+            raise RuntimeError(f"Claude CLI failed: {error}")
+
+        # Mark session as successfully created if we got a 0 return code
+        if not self._session_created:
+            self._session_created = True
+
+        responses: List[str] = []
+        for raw_line in stdout.decode().splitlines():
+            raw_line = raw_line.strip()
+            if not raw_line:
+                continue
             try:
-                process = await asyncio.create_subprocess_exec(
-                    *args,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
-                    cwd=os.getcwd(),
-                    env=os.environ.copy(),
-                    limit=2 * 1024 * 1024,  # 2MB limit for large JSON responses
-                )
-                stdout, stderr = await process.communicate()
+                event = json.loads(raw_line)
+            except json.JSONDecodeError:
+                continue
 
-                if process.returncode != 0:
-                    error = (
-                        stderr.decode().strip()
-                        or stdout.decode().strip()
-                        or "unknown error"
-                    )
-                    # Handle "session already in use" error by rotating session ID
-                    if "already in use" in error and attempt < max_retries - 1:
-                        import uuid
+            event_type = event.get("type")
+            if event_type == "system" and not self.session_id:
+                session_id = event.get("session_id")
+                if isinstance(session_id, str):
+                    self.session_id = session_id
+            elif event_type == "assistant":
+                message = event.get("message", {})
+                content = message.get("content", [])
+                text_parts = [
+                    chunk.get("text", "")
+                    for chunk in content
+                    if chunk.get("type") == "text"
+                ]
+                text = "\n".join(filter(None, text_parts)).strip()
+                if text:
+                    responses.append(text)
+            elif event_type == "result" and event.get("is_error"):
+                result_text = event.get("result") or "Claude CLI reported an error"
+                raise RuntimeError(str(result_text))
 
-                        new_id = str(uuid.uuid4())
-                        print(
-                            f"Claude CLI: Session {self.session_id} in use, rotating to {new_id}"
-                        )
-                        self.session_id = new_id
-                        continue
-
-                    raise RuntimeError(f"Claude CLI failed: {error}")
-
-                responses: List[str] = []
-                for raw_line in stdout.decode().splitlines():
-                    # ... (parsing logic remains same) ...
-                    raw_line = raw_line.strip()
-                    if not raw_line:
-                        continue
-                    try:
-                        event = json.loads(raw_line)
-                    except json.JSONDecodeError:
-                        continue
-
-                    event_type = event.get("type")
-                    if event_type == "system" and not self.session_id:
-                        session_id = event.get("session_id")
-                        if isinstance(session_id, str):
-                            self.session_id = session_id
-                    elif event_type == "assistant":
-                        message = event.get("message", {})
-                        content = message.get("content", [])
-                        text_parts = [
-                            chunk.get("text", "")
-                            for chunk in content
-                            if chunk.get("type") == "text"
-                        ]
-                        text = "\n".join(filter(None, text_parts)).strip()
-                        if text:
-                            responses.append(text)
-                    elif event_type == "result" and event.get("is_error"):
-                        result_text = (
-                            event.get("result") or "Claude CLI reported an error"
-                        )
-                        raise RuntimeError(str(result_text))
-
-                return "\n\n".join(responses)
-
-            except Exception as e:
-                if "already in use" in str(e) and attempt < max_retries - 1:
-                    import uuid
-
-                    self.session_id = str(uuid.uuid4())
-                    continue
-                raise e
-
-        return ""  # Should not reach here
+        return "\n\n".join(responses)
