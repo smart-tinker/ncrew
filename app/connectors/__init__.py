@@ -20,27 +20,27 @@ class ConnectorSpec:
 
 CONNECTOR_SPECS: Dict[str, ConnectorSpec] = {
     "qwen_acp": ConnectorSpec(
-        module="connectors.qwen_acp_connector",
+        module="app.connectors.qwen_acp_connector",
         class_name="QwenACPConnector",
         requires_cli=True,
     ),
     "gemini_acp": ConnectorSpec(
-        module="connectors.gemini_acp_connector",
+        module="app.connectors.gemini_acp_connector",
         class_name="GeminiACPConnector",
         requires_cli=True,
     ),
     "opencode_acp": ConnectorSpec(
-        module="connectors.opencode_acp_connector",
+        module="app.connectors.opencode_acp_connector",
         class_name="OpenCodeACPConnector",
         requires_cli=True,
     ),
     "codex_cli": ConnectorSpec(
-        module="connectors.codex_cli_connector",
+        module="app.connectors.codex_cli_connector",
         class_name="CodexCLIConnector",
         requires_cli=True,
     ),
     "claude_cli": ConnectorSpec(
-        module="connectors.claude_cli_connector",
+        module="app.connectors.claude_cli_connector",
         class_name="ClaudeCLICodeConnector",
         requires_cli=True,
     ),
