@@ -1,12 +1,12 @@
 # NeuroCrew Lab — архитектура (MVP)
 
 ## Общее описание
-NeuroCrew Lab реализует паттерн **Puppet Master**: один бот-слушатель управляет несколькими ботами-актёрами, за которыми стоят AI-агенты (CLI через ACP и API через SDK). Вся координация происходит в одном Telegram-чате, состояние хранится на диске. Технологический стек минимален: Python/asyncio, `python-telegram-bot`, subprocess-коннекторы для CLI, SDK для API и JSON-файлы в `data/`.
+NeuroCrew Lab реализует паттерн **Puppet Master**: один бот-слушатель управляет несколькими ботами-актёрами, за которыми стоят AI-агенты (все через официальные CLI). Вся координация происходит в одном Telegram-чате, состояние хранится на диске. Технологический стек минимален: Python/asyncio, `python-telegram-bot`, subprocess-коннекторы для CLI и JSON-файлы в `data/`.
 
 ```
 Пользователь → Telegram-группа → Listener Bot → NeuroCrew Core → Цепочка ролей
                                                    ↓
-                                ACP: OpenCode/Qwen/Gemini, SDK: OpenAI/Anthropic
+                                ACP: OpenCode/Qwen/Gemini, headless CLI: Codex/Claude
                                                    ↓
                                  Actor Bots → Telegram-группа
 ```
@@ -19,10 +19,10 @@ NeuroCrew Lab реализует паттерн **Puppet Master**: один бо
 - **ncrew.py (NeuroCrewLab)**  
   Сердце системы: ведёт указатели ролей на чат, создаёт/переиспользует коннекторы, реализует ретраи и выдаёт ответы генератором для `TelegramBot`.
 - **connectors/**  
-  - `base.py` — общий интерфейс запуска/выполнения/завершения ACP-процессов.  
-  - `base_sdk_connector.py` — унифицированная обёртка вокруг официальных SDK.  
+  - `base.py` — общий интерфейс запуска/выполнения/завершения CLI-процессов.  
   - `opencode_acp_connector.py`, `qwen_acp_connector.py`, `gemini_acp_connector.py` — ACP-handshake, управление subprocess и потоками вывода.  
-  - `openai_sdk_connector.py`, `anthropic_sdk_connector.py` — вызовы API с чтением ключей из окружения пользователя.
+  - `codex_cli_connector.py` — headless `codex exec --json`.  
+  - `claude_cli_connector.py` — headless `claude -p --output-format stream-json`.
 - **storage/file_storage.py**  
   Асинхронно сохраняет историю в `data/conversations/chat_{id}.json`, добавляет метаданные и бэкапит повреждённые файлы.
 - **config.py + roles/agents.yaml**  
@@ -45,7 +45,7 @@ NeuroCrew Lab реализует паттерн **Puppet Master**: один бо
 
 ## Вид со стороны эксплуатации
 - **Runtime**: один процесс, один asyncio loop, последовательное выполнение ролей.  
-- **Зависимости**: `requirements.txt` (Flask, SDK, telegram-bot), локально установленные CLI (`opencode`, `qwen`, `gemini`), API-ключи в пользовательском окружении.  
+- **Зависимости**: `requirements.txt` (Flask, telegram-bot), локально установленные CLI (`opencode`, `qwen`, `gemini`, `codex`, `claude`).  
 - **Состояние**: локальная файловая система и `.env`, оба исключены из git.  
 - **Скрипты**: `ncrew.sh` для подготовки окружения, `scripts/*.py` для проверок, `web_server.py` для ручного редактирования ролей.
 

@@ -37,6 +37,7 @@ class OpenCodeACPConnector(BaseConnector):
     """Connector that implements the OpenCode ACP protocol."""
 
     DEFAULT_COMMAND = "opencode acp"
+    STREAM_READER_LIMIT = 2 * 1024 * 1024  # 2MB per line to accommodate large JSON payloads
 
     def __init__(self):
         super().__init__()
@@ -66,6 +67,7 @@ class OpenCodeACPConnector(BaseConnector):
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             env=env,
+            limit=self.STREAM_READER_LIMIT,
         )
 
         self.message_id = 0

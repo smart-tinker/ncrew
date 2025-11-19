@@ -10,6 +10,7 @@ import asyncio
 import logging
 import signal
 import sys
+from typing import Optional
 from urllib.request import urlopen
 from urllib.error import URLError
 
@@ -95,6 +96,9 @@ async def async_main():
     await bot_instance.run_startup_introductions()
     logger.info("Startup agent introductions completed")
 
+    shutdown_event = asyncio.Event()
+    shutdown_task: Optional[asyncio.Task] = None
+
     # Graceful shutdown function with timeout
     async def graceful_shutdown():
         """Perform graceful shutdown of all components with timeout."""
@@ -110,10 +114,42 @@ async def async_main():
         except Exception as e:
             logger.error(f"Error during graceful shutdown: {e}")
 
+    async def ensure_shutdown(reason: str):
+        nonlocal shutdown_task
+        if shutdown_event.is_set():
+            return shutdown_task
+
+        shutdown_event.set()
+        logger.info("Shutdown requested (%s)", reason)
+
+        shutdown_task = asyncio.create_task(graceful_shutdown())
+        await shutdown_task
+        return shutdown_task
+
     # Add graceful_shutdown to bot for internal access
     bot_instance.graceful_shutdown = graceful_shutdown
 
+    loop = asyncio.get_running_loop()
+
+    def handle_sigint():
+        if shutdown_event.is_set():
+            logger.warning("Second SIGINT received, forcing immediate exit")
+            loop.stop()
+            return
+        logger.info("SIGINT received. Initiating shutdown...")
+        loop.call_soon_threadsafe(lambda: asyncio.create_task(ensure_shutdown("SIGINT")))
+
     try:
+        if hasattr(loop, "add_signal_handler"):
+            loop.add_signal_handler(signal.SIGINT, handle_sigint)
+        else:
+            signal.signal(
+                signal.SIGINT,
+                lambda *_: loop.call_soon_threadsafe(
+                    lambda: asyncio.create_task(ensure_shutdown("SIGINT"))
+                ),
+            )
+
         logger.info("Starting NeuroCrew Lab Telegram bot...")
         # Use the proper async lifecycle management
         await bot_instance.application.initialize()
@@ -122,32 +158,33 @@ async def async_main():
 
         # Keep the bot running and check for reload flag
         try:
-            while True:
+            while not shutdown_event.is_set():
                 if os.path.exists('.reload'):
                     logger.info("Reload flag detected. Restarting application...")
                     await bot_instance.application.bot.send_message(
                         chat_id=Config.TARGET_CHAT_ID,
                         text="Configuration updated. Restarting and starting a new conversation..."
                     )
-                    await graceful_shutdown()
+                    await ensure_shutdown("configuration reload")
                     os.remove('.reload')
                     os.execv(sys.executable, ['python'] + sys.argv)
                 await asyncio.sleep(1)
         except asyncio.CancelledError:
             logger.info("Bot operation cancelled")
 
-        # Graceful shutdown
-        await bot_instance.application.updater.stop()
-        await bot_instance.application.stop()
-        await bot_instance.application.shutdown()
+        if not shutdown_event.is_set():
+            await ensure_shutdown("loop completed")
 
     except KeyboardInterrupt:
         logger.info("Application stopped by user (Ctrl+C)")
-        await graceful_shutdown()
+        await ensure_shutdown("KeyboardInterrupt")
     except Exception as e:
         logger.error(f"Unexpected error during bot operation: {e}")
-        await graceful_shutdown()
+        await ensure_shutdown("Unhandled exception")
         raise
+    finally:
+        if hasattr(loop, "remove_signal_handler"):
+            loop.remove_signal_handler(signal.SIGINT)
 
 
 if __name__ == '__main__':

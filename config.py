@@ -10,7 +10,7 @@ import yaml
 from typing import Dict, Optional, List, Any
 from pathlib import Path
 from dotenv import load_dotenv
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 
 from connectors import get_connector_spec
 
@@ -21,13 +21,14 @@ load_dotenv()
 @dataclass
 class RoleConfig:
     """Конфигурация роли агента."""
+
     # Основные поля (все обязательные аргументы идут первыми)
     role_name: str
     display_name: str
     telegram_bot_name: str
     system_prompt_file: str
     agent_type: str
-    cli_command: str
+    cli_command: str = ""  # Optional for SDK agents
 
     # Дополнительная информация (с значениями по умолчанию)
     description: str = ""
@@ -46,13 +47,14 @@ class RoleConfig:
             raise ValueError("telegram_bot_name is required")
         if not self.agent_type:
             raise ValueError("agent_type is required")
-        if (not self.cli_command) and (not connector_spec or connector_spec.requires_cli):
+        if (not self.cli_command) and (
+            not connector_spec or connector_spec.requires_cli
+        ):
             raise ValueError("cli_command is required")
 
         # Преобразование строки в Path для системного промпта
         if self.system_prompt_file:
             self.system_prompt_path = Path(self.system_prompt_file)
-
 
     def get_bot_token(self) -> Optional[str]:
         """Получает токен для Telegram бота этой роли."""
@@ -64,9 +66,11 @@ class RoleConfig:
 
     def __repr__(self) -> str:
         """Детальное строковое представление роли."""
-        return (f"RoleConfig(role_name='{self.role_name}', "
-                f"agent_type='{self.agent_type}', "
-                f"cli_command='{self.cli_command}')")
+        return (
+            f"RoleConfig(role_name='{self.role_name}', "
+            f"agent_type='{self.agent_type}', "
+            f"cli_command='{self.cli_command}')"
+        )
 
 
 class RolesRegistry:
@@ -89,7 +93,6 @@ class RolesRegistry:
         """Возвращает список ролей для указанного типа агента."""
         return [role for role in self.roles.values() if role.agent_type == agent_type]
 
-
     def get_available_roles(self) -> List[RoleConfig]:
         """Возвращает список всех доступных ролей."""
         return list(self.roles.values())
@@ -102,17 +105,23 @@ class RolesRegistry:
             connector_spec = get_connector_spec(role.agent_type)
             # Проверяем наличие файла системного промпта
             if role.system_prompt_path and not role.system_prompt_path.exists():
-                errors.append(f"Role '{role_name}': System prompt file not found: {role.system_prompt_path}")
+                errors.append(
+                    f"Role '{role_name}': System prompt file not found: {role.system_prompt_path}"
+                )
 
             # Проверяем наличие токена для бота
             if not role.get_bot_token():
-                errors.append(f"Role '{role_name}': No Telegram bot token found for '{role.telegram_bot_name}'")
+                errors.append(
+                    f"Role '{role_name}': No Telegram bot token found for '{role.telegram_bot_name}'"
+                )
 
             # Проверяем agent_type
             if not role.agent_type:
                 errors.append(f"Role '{role_name}': agent_type is missing")
             elif not connector_spec:
-                errors.append(f"Role '{role_name}': Unknown agent_type '{role.agent_type}'")
+                errors.append(
+                    f"Role '{role_name}': Unknown agent_type '{role.agent_type}'"
+                )
 
             # Проверяем cli_command
             requires_cli = connector_spec.requires_cli if connector_spec else True
@@ -123,19 +132,20 @@ class RolesRegistry:
 
 
 def create_role_from_dict(role_data: Dict[str, Any]) -> RoleConfig:
-    """Создает RoleConfig из словаря (для YAML парсинга)."""
-    # Создаем роль
-    return RoleConfig(**role_data)
+    """Создает RoleConfig из словаря (для YAML парсинга), игнорируя неизвестные поля."""
+    allowed_fields = {f.name for f in fields(RoleConfig)}
+    sanitized_data = {k: v for k, v in role_data.items() if k in allowed_fields}
+    return RoleConfig(**sanitized_data)
 
 
 class Config:
     """Configuration class for NeuroCrew Lab."""
 
     # Главный токен для прослушивания
-    MAIN_BOT_TOKEN: str = os.getenv('MAIN_BOT_TOKEN', '')
+    MAIN_BOT_TOKEN: str = os.getenv("MAIN_BOT_TOKEN", "")
 
     # ID целевого чата
-    TARGET_CHAT_ID: int = int(os.getenv('TARGET_CHAT_ID', '0'))
+    TARGET_CHAT_ID: int = int(os.getenv("TARGET_CHAT_ID", "0"))
 
     # Новый формат токенов для ролей
     TELEGRAM_BOT_TOKENS: Dict[str, str] = {}
@@ -145,19 +155,18 @@ class Config:
     role_based_enabled: bool = False
 
     # System Configuration
-    MAX_CONVERSATION_LENGTH: int = int(os.getenv('MAX_CONVERSATION_LENGTH', '50'))
-    AGENT_TIMEOUT: int = int(os.getenv('AGENT_TIMEOUT', '120'))
-    LOG_LEVEL: str = os.getenv('LOG_LEVEL', 'INFO').upper()
-    DATA_DIR: Path = Path(os.getenv('DATA_DIR', './data'))
+    MAX_CONVERSATION_LENGTH: int = int(os.getenv("MAX_CONVERSATION_LENGTH", "50"))
+    AGENT_TIMEOUT: int = int(os.getenv("AGENT_TIMEOUT", "120"))
+    LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO").upper()
+    DATA_DIR: Path = Path(os.getenv("DATA_DIR", "./data"))
 
     # System Reminder Configuration
-    SYSTEM_REMINDER_INTERVAL: int = int(os.getenv('SYSTEM_REMINDER_INTERVAL', '5'))
+    SYSTEM_REMINDER_INTERVAL: int = int(os.getenv("SYSTEM_REMINDER_INTERVAL", "5"))
 
     # Telegram Configuration
     TELEGRAM_MAX_MESSAGE_LENGTH: int = 4096
     MESSAGE_SPLIT_THRESHOLD: int = 4000  # Split before hitting limit
 
-    
     @classmethod
     def validate(cls) -> bool:
         """
@@ -170,7 +179,10 @@ class Config:
             ValueError: If critical settings are missing or invalid
         """
         # Проверка главного токена
-        if not cls.MAIN_BOT_TOKEN or cls.MAIN_BOT_TOKEN == 'your_main_listener_bot_token_here':
+        if (
+            not cls.MAIN_BOT_TOKEN
+            or cls.MAIN_BOT_TOKEN == "your_main_listener_bot_token_here"
+        ):
             raise ValueError("MAIN_BOT_TOKEN не сконфигурирован.")
 
         # Проверка ID чата
@@ -179,7 +191,9 @@ class Config:
 
         # Проверка токенов ботов
         if not cls.TELEGRAM_BOT_TOKENS and cls.is_role_based_enabled():
-            raise ValueError("TELEGRAM_BOT_TOKENS не сконфигурирован или имеет неверный формат.")
+            raise ValueError(
+                "TELEGRAM_BOT_TOKENS не сконфигурирован или имеет неверный формат."
+            )
 
         if cls.MAX_CONVERSATION_LENGTH < 1:
             raise ValueError("MAX_CONVERSATION_LENGTH must be greater than 0")
@@ -187,7 +201,7 @@ class Config:
         if cls.AGENT_TIMEOUT < 1:
             raise ValueError("AGENT_TIMEOUT must be greater than 0")
 
-        if cls.LOG_LEVEL not in ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']:
+        if cls.LOG_LEVEL not in ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]:
             raise ValueError(f"Invalid LOG_LEVEL: {cls.LOG_LEVEL}")
 
         return True
@@ -210,14 +224,16 @@ class Config:
     def ensure_directories(cls) -> None:
         """Ensure all required directories exist."""
         data_dir = cls.get_data_dir()
-        (data_dir / 'conversations').mkdir(exist_ok=True)
-        (data_dir / 'logs').mkdir(exist_ok=True)
+        (data_dir / "conversations").mkdir(exist_ok=True)
+        (data_dir / "logs").mkdir(exist_ok=True)
 
     @classmethod
     def _load_telegram_bot_tokens(cls):
         """Динамически загружает токены из переменных окружения на основе загруженных ролей."""
         if not cls.is_role_based_enabled():
-            print("Warning: Role-based configuration is not enabled, skipping token loading")
+            print(
+                "Warning: Role-based configuration is not enabled, skipping token loading"
+            )
             return
 
         token_dict = {}
@@ -232,8 +248,10 @@ class Config:
 
         for role in loaded_roles:
             # Проверяем, что у роли есть имя бота
-            if not hasattr(role, 'telegram_bot_name') or not role.telegram_bot_name:
-                print(f"Warning: Role '{role.role_name}' has no telegram_bot_name, skipping")
+            if not hasattr(role, "telegram_bot_name") or not role.telegram_bot_name:
+                print(
+                    f"Warning: Role '{role.role_name}' has no telegram_bot_name, skipping"
+                )
                 continue
 
             # Формируем имя переменной окружения
@@ -245,17 +263,20 @@ class Config:
             if token:
                 token_dict[role.telegram_bot_name] = token
                 masked_token = token[:4] + "..." if len(token) > 4 else token
-                print(f"✓ Loaded token for {role.telegram_bot_name} ({var_name}): {masked_token}")
+                print(
+                    f"✓ Loaded token for {role.telegram_bot_name} ({var_name}): {masked_token}"
+                )
             else:
                 print(f"⚠ Token not found for {role.telegram_bot_name} ({var_name})")
 
         cls.TELEGRAM_BOT_TOKENS = token_dict
 
-        print(f"Token loading completed: {len(cls.TELEGRAM_BOT_TOKENS)}/{len(loaded_roles)} tokens loaded")
+        print(
+            f"Token loading completed: {len(cls.TELEGRAM_BOT_TOKENS)}/{len(loaded_roles)} tokens loaded"
+        )
 
-    
     @classmethod
-    def load_roles(cls, config_path: Path = Path('roles/agents.yaml')) -> bool:
+    def load_roles(cls, config_path: Path = Path("roles/agents.yaml")) -> bool:
         """
         Загружает и парсит конфигурацию ролей из agents.yaml.
 
@@ -269,22 +290,24 @@ class Config:
             return False
 
         try:
-            with open(config_path, 'r', encoding='utf-8') as f:
+            with open(config_path, "r", encoding="utf-8") as f:
                 config_data = yaml.safe_load(f)
 
-            if not config_data or 'roles' not in config_data:
+            if not config_data or "roles" not in config_data:
                 return False
 
             # Создаем реестр ролей
             cls.roles_registry = RolesRegistry()
 
             # Загружаем роли
-            for role_data in config_data.get('roles', []):
+            for role_data in config_data.get("roles", []):
                 try:
                     role = create_role_from_dict(role_data)
                     cls.roles_registry.add_role(role)
                 except Exception as e:
-                    print(f"Error loading role {role_data.get('role_name', 'unknown')}: {e}")
+                    print(
+                        f"Error loading role {role_data.get('role_name', 'unknown')}: {e}"
+                    )
                     continue
 
             cls.role_based_enabled = True
@@ -339,21 +362,21 @@ class Config:
     def get_configuration_summary(cls) -> Dict[str, any]:
         """Возвращает сводку конфигурации."""
         summary = {
-            'main_bot_configured': bool(cls.MAIN_BOT_TOKEN),
-            'target_chat_id': cls.TARGET_CHAT_ID,
-            'data_dir': str(cls.DATA_DIR),
-            'max_conversation_length': cls.MAX_CONVERSATION_LENGTH,
-            'agent_timeout': cls.AGENT_TIMEOUT,
-            'system_reminder_interval': cls.SYSTEM_REMINDER_INTERVAL,
+            "main_bot_configured": bool(cls.MAIN_BOT_TOKEN),
+            "target_chat_id": cls.TARGET_CHAT_ID,
+            "data_dir": str(cls.DATA_DIR),
+            "max_conversation_length": cls.MAX_CONVERSATION_LENGTH,
+            "agent_timeout": cls.AGENT_TIMEOUT,
+            "system_reminder_interval": cls.SYSTEM_REMINDER_INTERVAL,
         }
 
         if cls.is_role_based_enabled():
-            summary['mode'] = 'role_based'
-            summary['total_roles'] = len(cls.get_available_roles())
-            summary['configured_bots'] = len(cls.TELEGRAM_BOT_TOKENS)
+            summary["mode"] = "role_based"
+            summary["total_roles"] = len(cls.get_available_roles())
+            summary["configured_bots"] = len(cls.TELEGRAM_BOT_TOKENS)
         else:
-            summary['mode'] = 'legacy'
-            summary['configured_bots'] = len(cls.TELEGRAM_BOT_TOKENS)
+            summary["mode"] = "legacy"
+            summary["configured_bots"] = len(cls.TELEGRAM_BOT_TOKENS)
 
         return summary
 

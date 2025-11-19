@@ -35,6 +35,13 @@ Use ./docs/ and ./backlog/ for shared notes and conclusions.
 - If there's **nothing new to add** (avoid dialogue loops)
 - To stay silent: empty response or write exactly `.....`
 
+## Strict Silence Policy
+- If you agree with the previous speaker or have nothing **SUBSTANTIAL** to add, you **MUST** stay silent.
+- Do not reply just to say "I agree", "Looks good", or "I confirm".
+- Only speak to add code, fix errors, or provide required analysis.
+- Output `.....` to stay silent.
+
+
 ## Code Quality Standards
 ```rust
 // Good: Well-structured, documented Rust code

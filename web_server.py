@@ -6,6 +6,16 @@ from flask import Flask, Response, render_template, request, redirect, url_for, 
 from dotenv import load_dotenv, find_dotenv, set_key
 from pathlib import Path
 
+ROLE_YAML_FIELDS = [
+    'role_name',
+    'display_name',
+    'telegram_bot_name',
+    'system_prompt_file',
+    'agent_type',
+    'cli_command',
+    'description',
+]
+
 load_dotenv()
 
 app = Flask(__name__)
@@ -68,9 +78,18 @@ def get_roles():
     return roles
 
 def save_roles(roles):
-    # Save roles to yaml
-    with open('roles/agents.yaml', 'w') as f:
-        yaml.dump({'roles': roles}, f, sort_keys=False)
+    # Save roles to yaml without sensitive token data
+    sanitized_roles = []
+    for role in roles:
+        sanitized_role = {
+            key: role.get(key, '')
+            for key in ROLE_YAML_FIELDS
+            if role.get(key) not in (None, '') or key in ('role_name', 'telegram_bot_name')
+        }
+        sanitized_roles.append(sanitized_role)
+
+    with open('roles/agents.yaml', 'w', encoding='utf-8') as f:
+        yaml.safe_dump({'roles': sanitized_roles}, f, sort_keys=False, allow_unicode=True)
 
     # Save tokens to .env
     dotenv_path = find_dotenv()
@@ -78,7 +97,8 @@ def save_roles(roles):
         bot_name = role.get('telegram_bot_name')
         if bot_name:
             token_var = f"{bot_name.upper()}_TOKEN"
-            set_key(dotenv_path, token_var, role.get('telegram_bot_token', ''))
+            token_value = role.get('telegram_bot_token', '') or ''
+            set_key(dotenv_path, token_var, token_value, quote_mode='never')
 
 
 @app.route('/')
@@ -93,6 +113,7 @@ def save():
     roles = []
     role_names = request.form.getlist('role_name')
     display_names = request.form.getlist('display_name')
+    telegram_bot_names = request.form.getlist('telegram_bot_name')
     prompt_files = request.form.getlist('system_prompt_file')
     agent_types = request.form.getlist('agent_type')
     cli_commands = request.form.getlist('cli_command')
@@ -103,7 +124,11 @@ def save():
 
     for i in range(total_roles):
         role_name = role_names[i]
-        telegram_bot_name = _sanitize_bot_name(role_name)
+        telegram_bot_name = ''
+        if i < len(telegram_bot_names) and telegram_bot_names[i]:
+            telegram_bot_name = telegram_bot_names[i]
+        else:
+            telegram_bot_name = _sanitize_bot_name(role_name)
 
         role = {
             'role_name': role_name,

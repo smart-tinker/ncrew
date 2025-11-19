@@ -155,6 +155,7 @@
                     </div>
                     <div class="role-body">
                         <input type="hidden" name="role_name" value="{{ role.role_name }}">
+                        <input type="hidden" name="telegram_bot_name" value="{{ role.telegram_bot_name }}">
                         <div class="form-grid">
                             <div class="form-group">
                                 <label>Отображаемое имя</label>
@@ -175,8 +176,8 @@
                                     <option value="gemini_acp" {% if role.agent_type == 'gemini_acp' %}selected{% endif %}>Gemini (ACP)</option>
                                     <option value="opencode_acp" {% if role.agent_type == 'opencode_acp' %}selected{% endif %}>OpenCode (ACP)</option>
                                     <option value="qwen_acp" {% if role.agent_type == 'qwen_acp' %}selected{% endif %}>Qwen (ACP)</option>
-                                    <option value="openai_sdk" {% if role.agent_type == 'openai_sdk' %}selected{% endif %}>OpenAI (SDK)</option>
-                                    <option value="anthropic_sdk" {% if role.agent_type == 'anthropic_sdk' %}selected{% endif %}>Anthropic (SDK)</option>
+                                    <option value="codex_cli" {% if role.agent_type == 'codex_cli' %}selected{% endif %}>Codex CLI</option>
+                                    <option value="claude_cli" {% if role.agent_type == 'claude_cli' %}selected{% endif %}>Claude CLI</option>
                                 </select>
                             </div>
                             <div class="form-group">
@@ -231,10 +232,10 @@
 
         const defaultCliCommands = {
             'gemini_acp': 'gemini --experimental-acp',
-            'opencode_acp': 'opencode --experimental-acp',
+            'opencode_acp': 'opencode acp',
             'qwen_acp': 'qwen --experimental-acp',
-            'openai_sdk': 'codex',
-            'anthropic_sdk': 'claude'
+            'codex_cli': 'codex exec --json --full-auto --sandbox workspace-write --skip-git-repo-check',
+            'claude_cli': 'claude -p --output-format stream-json --permission-mode bypassPermissions --dangerously-skip-permissions --verbose'
         };
 
         function updateCliCommand(selectElement) {
@@ -247,9 +248,25 @@
             }
         }
 
+        function sanitizeBotName(roleName) {
+            if (!roleName) {
+                return 'New_Role_Bot';
+            }
+            let candidate = roleName.trim().replace(/[^A-Za-z0-9_]+/g, '_');
+            candidate = candidate.replace(/_+/g, '_').replace(/^_+|_+$/g, '');
+            if (!candidate) {
+                candidate = 'New_Role';
+            }
+            if (!candidate.toLowerCase().endsWith('_bot')) {
+                candidate += '_Bot';
+            }
+            return candidate;
+        }
+
         function addRole() {
             const roleName = prompt('Введите уникальное имя роли:');
             if (roleName && !document.querySelector(`[name="role_name"][value="${roleName}"]`)) {
+                const botName = sanitizeBotName(roleName);
                 const newRole = document.createElement('div');
                 newRole.className = 'role';
                 newRole.innerHTML = `
@@ -259,6 +276,7 @@
                     </div>
                     <div class="role-body">
                         <input type="hidden" name="role_name" value="${roleName}">
+                        <input type="hidden" name="telegram_bot_name" value="${botName}">
                         <div class="form-grid">
                             <div class="form-group">
                                 <label>Отображаемое имя</label>
@@ -279,8 +297,8 @@
                                     <option value="gemini_acp">Gemini (ACP)</option>
                                     <option value="opencode_acp">OpenCode (ACP)</option>
                                     <option value="qwen_acp">Qwen (ACP)</option>
-                                    <option value="openai_sdk">OpenAI (SDK)</option>
-                                    <option value="anthropic_sdk">Anthropic (SDK)</option>
+                                    <option value="codex_cli">Codex CLI</option>
+                                    <option value="claude_cli">Claude CLI</option>
                                 </select>
                             </div>
                             <div class="form-group">

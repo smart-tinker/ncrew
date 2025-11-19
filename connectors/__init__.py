@@ -34,15 +34,15 @@ CONNECTOR_SPECS: Dict[str, ConnectorSpec] = {
         class_name="OpenCodeACPConnector",
         requires_cli=True,
     ),
-    "openai_sdk": ConnectorSpec(
-        module="connectors.openai_sdk_connector",
-        class_name="OpenAISDKConnector",
-        requires_cli=False,
+    "codex_cli": ConnectorSpec(
+        module="connectors.codex_cli_connector",
+        class_name="CodexCLIConnector",
+        requires_cli=True,
     ),
-    "anthropic_sdk": ConnectorSpec(
-        module="connectors.anthropic_sdk_connector",
-        class_name="AnthropicSDKConnector",
-        requires_cli=False,
+    "claude_cli": ConnectorSpec(
+        module="connectors.claude_cli_connector",
+        class_name="ClaudeCLICodeConnector",
+        requires_cli=True,
     ),
 }
 

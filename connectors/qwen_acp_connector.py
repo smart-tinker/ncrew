@@ -38,6 +38,7 @@ class QwenACPConnector(BaseConnector):
 
     DEFAULT_COMMAND = "qwen --experimental-acp"
     AUTH_METHOD_QWEN = "qwen-oauth"
+    STREAM_READER_LIMIT = 2 * 1024 * 1024
 
     def __init__(self):
         super().__init__()
@@ -67,6 +68,7 @@ class QwenACPConnector(BaseConnector):
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             env=env,
+            limit=self.STREAM_READER_LIMIT,
         )
 
         self.message_id = 0

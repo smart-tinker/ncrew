@@ -75,7 +75,9 @@ class BaseConnector(ABC):
             return
 
         if self.process.returncode is not None:
-            self.logger.debug(f"Process {self.process.pid} already terminated with code {self.process.returncode}")
+            self.logger.debug(
+                f"Process {self.process.pid} already terminated with code {self.process.returncode}"
+            )
             self.process = None
             return
 
@@ -88,16 +90,22 @@ class BaseConnector(ABC):
                 self.logger.info(f"Process {self.process.pid} terminated gracefully.")
             except asyncio.TimeoutError:
                 # Force kill if graceful termination fails
-                self.logger.warning(f"Process {self.process.pid} did not terminate, force killing...")
+                self.logger.warning(
+                    f"Process {self.process.pid} did not terminate, force killing..."
+                )
                 self.process.kill()
                 try:
                     await asyncio.wait_for(self.process.wait(), timeout=2.0)
                     self.logger.info(f"Process {self.process.pid} force killed.")
                 except asyncio.TimeoutError:
-                    self.logger.error(f"Process {self.process.pid} could not be killed, orphaned process may exist")
+                    self.logger.error(
+                        f"Process {self.process.pid} could not be killed, orphaned process may exist"
+                    )
         except (ProcessLookupError, RuntimeError) as e:
             # Process might have already terminated or event loop closed
-            self.logger.info(f"Process {self.process.pid} already terminated or event loop closed: {e}")
+            self.logger.info(
+                f"Process {self.process.pid} already terminated or event loop closed: {e}"
+            )
         except Exception as e:
             self.logger.error(f"Error shutting down process {self.process.pid}: {e}")
         finally:
@@ -129,12 +137,11 @@ class BaseConnector(ABC):
             # Send signal 0 to check if process exists
             import os
             import signal
+
             os.kill(self.process.pid, 0)
             return True
         except (ProcessLookupError, PermissionError):
             return False
-
-
 
     async def _send_to_process(self, text: str) -> None:
         """
@@ -150,11 +157,11 @@ class BaseConnector(ABC):
             raise RuntimeError("Process not available for writing")
 
         # Ensure newline at the end
-        if not text.endswith('\n'):
-            text += '\n'
+        if not text.endswith("\n"):
+            text += "\n"
 
         try:
-            self.process.stdin.write(text.encode('utf-8'))
+            self.process.stdin.write(text.encode("utf-8"))
             await self.process.stdin.drain()
             self.logger.debug(f"Sent to process: {text[:100]}...")
         except Exception as e:
@@ -163,17 +170,15 @@ class BaseConnector(ABC):
 
     def _get_clean_env(self) -> dict:
         """
-        Get environment without proxy variables that might interfere with CLI agents.
+        Get environment for the process.
+
+        We allow proxy variables to be inherited so that agents can work
+        behind proxies or VPNs.
 
         Returns:
-            dict: Clean environment without proxy variables
+            dict: Environment variables
         """
         import os
-        clean_env = os.environ.copy()
-        proxy_vars = [
-            'HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'NO_PROXY',
-            'http_proxy', 'https_proxy', 'all_proxy', 'no_proxy'
-        ]
-        for var in proxy_vars:
-            clean_env.pop(var, None)
-        return clean_env
+
+        # Simply inherit the full environment including proxy settings
+        return os.environ.copy()

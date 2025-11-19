@@ -7,38 +7,28 @@ with the NeuroCrew Lab system.
 
 import asyncio
 import logging
-import os
 from typing import List, Optional
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, Bot
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackContext
+from telegram.ext import (
+    Application,
+    CommandHandler,
+    MessageHandler,
+    filters,
+    CallbackContext,
+)
 from telegram.ext import CallbackQueryHandler
 
-from config import Config
+from config import Config, RoleConfig
 from ncrew import NeuroCrewLab
 from utils.logger import setup_logger
-from utils.formatters import format_welcome_message, format_help_message, format_status_message, format_agent_response, split_long_message
+from utils.formatters import (
+    format_welcome_message,
+    format_help_message,
+    format_status_message,
+    format_agent_response,
+    split_long_message,
+)
 from utils.security import validate_input, sanitize_for_logging
-
-
-class ProxyManager:
-    """Context manager to temporarily disable proxy settings."""
-
-    def __init__(self):
-        self.original_proxies = {}
-        self.proxy_vars = ['HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'http_proxy', 'https_proxy', 'all_proxy']
-
-    def __enter__(self):
-        # Save and remove proxy variables
-        for var in self.proxy_vars:
-            if var in os.environ:
-                self.original_proxies[var] = os.environ[var]
-                del os.environ[var]
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        # Restore proxy variables
-        for var, value in self.original_proxies.items():
-            os.environ[var] = value
 
 
 class TelegramBot:
@@ -57,11 +47,12 @@ class TelegramBot:
             # Initialize application with main listener bot token
             bot_token = Config.MAIN_BOT_TOKEN or Config.TELEGRAM_BOT_TOKEN
 
-            # Disable proxy for telegram bot (SOCKS proxy not supported)
-            with ProxyManager():
-                self.application = Application.builder().token(bot_token).build()
+            # Create application directly using system settings
+            self.application = Application.builder().token(bot_token).build()
 
-            self.logger.info("Telegram application created successfully with main listener bot (proxy disabled)")
+            self.logger.info(
+                "Telegram application created successfully with main listener bot"
+            )
 
             # Set up handlers
             self._setup_handlers()
@@ -83,8 +74,58 @@ class TelegramBot:
 
     async def run_startup_introductions(self):
         """Triggers the agent introduction sequence at startup."""
-        if self.ncrew:
-            await self.ncrew.perform_startup_introductions(self.application.bot)
+        await self._ensure_ncrew_initialized()
+
+        try:
+            introductions = await self.ncrew.perform_startup_introductions()
+        except Exception as intro_error:
+            self.logger.error(f"Failed to gather startup introductions: {intro_error}")
+            return
+
+        if not introductions:
+            self.logger.warning("No introductions collected during startup sequence.")
+            return
+
+        for role_config, intro_text in introductions:
+            formatted_intro = format_agent_response(
+                role_config.display_name, intro_text
+            )
+            messages_to_send = split_long_message(
+                formatted_intro, max_length=Config.TELEGRAM_MAX_MESSAGE_LENGTH
+            )
+
+            sent_via_actor = await self._send_role_messages_via_actor(
+                role_config, messages_to_send
+            )
+            if not sent_via_actor:
+                self.logger.warning(
+                    "Failed to send introduction via actor bot for role %s. Falling back to coordinator bot.",
+                    role_config.role_name,
+                )
+                for chunk in messages_to_send:
+                    await self.application.bot.send_message(
+                        chat_id=Config.TARGET_CHAT_ID, text=chunk, parse_mode="Markdown"
+                    )
+
+            await asyncio.sleep(1.5)
+
+        if Config.TARGET_CHAT_ID:
+            try:
+                await self.application.bot.send_message(
+                    chat_id=Config.TARGET_CHAT_ID,
+                    text="💬 Команда готова к работе. Жду ваших указаний.",
+                )
+                self.logger.info(
+                    f"Sent 'ready' message to chat ID {Config.TARGET_CHAT_ID}."
+                )
+            except Exception as ready_error:
+                self.logger.error(
+                    f"Failed to send 'ready' message to Telegram: {ready_error}"
+                )
+        else:
+            self.logger.warning(
+                "No TARGET_CHAT_ID configured. Cannot send 'ready' message."
+            )
 
     def _is_target_chat(self, chat_id: int) -> bool:
         """Check if message is from the target chat."""
@@ -115,6 +156,64 @@ class TelegramBot:
 
         self.logger.debug("Telegram handlers set up successfully")
 
+    async def _send_role_messages_via_actor(
+        self, role_config: RoleConfig, messages: List[str]
+    ) -> bool:
+        """
+        Attempt to send prepared messages via the role-specific Telegram bot.
+
+        Args:
+            role_config: Role configuration for which to send the message.
+            messages: Pre-formatted messages ready for delivery.
+
+        Returns:
+            bool: True if delivery through the actor bot succeeded, False otherwise.
+        """
+        bot_lookup_name = role_config.telegram_bot_name
+        agent_token = Config.TELEGRAM_BOT_TOKENS.get(bot_lookup_name)
+        self.logger.info(
+            "Actor bot lookup: role=%s, bot_name=%s, token_found=%s",
+            role_config.role_name,
+            bot_lookup_name,
+            bool(agent_token),
+        )
+
+        if not agent_token:
+            return False
+
+        actor_bot = Bot(token=agent_token)
+        for msg in messages:
+            try:
+                await actor_bot.send_message(
+                    chat_id=Config.TARGET_CHAT_ID, text=msg, parse_mode="Markdown"
+                )
+                self.logger.info(
+                    "Sent response from %s (%s) via actor bot",
+                    role_config.display_name,
+                    bot_lookup_name,
+                )
+            except Exception as send_error:
+                self.logger.error(
+                    "Error sending message via actor bot %s (%s): %s",
+                    role_config.display_name,
+                    bot_lookup_name,
+                    send_error,
+                )
+                try:
+                    await actor_bot.send_message(
+                        chat_id=Config.TARGET_CHAT_ID, text=msg
+                    )
+                except Exception as fallback_error:
+                    self.logger.error(
+                        "Critical error sending via actor bot %s (%s): %s",
+                        role_config.display_name,
+                        bot_lookup_name,
+                        fallback_error,
+                    )
+                    return False
+
+        return True
+
     async def cmd_start(self, update: Update, context: CallbackContext):
         """
         Handle /start command.
@@ -126,19 +225,23 @@ class TelegramBot:
         try:
             # Check if this is from target chat
             if not self._is_target_chat(update.effective_chat.id):
-                self.logger.warning(f"Message from non-target chat {update.effective_chat.id} ignored")
+                self.logger.warning(
+                    f"Message from non-target chat {update.effective_chat.id} ignored"
+                )
                 return
 
             await self._ensure_ncrew_initialized()
 
             welcome_msg = format_welcome_message()
-            await update.message.reply_text(welcome_msg, parse_mode='Markdown')
+            await update.message.reply_text(welcome_msg, parse_mode="Markdown")
 
             self.logger.info(f"User {update.effective_user.id} started the bot")
 
         except Exception as e:
             self.logger.error(f"Error in /start command: {e}")
-            await update.message.reply_text("❌ Sorry, an error occurred. Please try again.")
+            await update.message.reply_text(
+                "❌ Sorry, an error occurred. Please try again."
+            )
 
     async def cmd_help(self, update: Update, context: CallbackContext):
         """
@@ -150,13 +253,15 @@ class TelegramBot:
         """
         try:
             help_msg = format_help_message()
-            await update.message.reply_text(help_msg, parse_mode='Markdown')
+            await update.message.reply_text(help_msg, parse_mode="Markdown")
 
             self.logger.info(f"User {update.effective_user.id} requested help")
 
         except Exception as e:
             self.logger.error(f"Error in /help command: {e}")
-            await update.message.reply_text("❌ Sorry, an error occurred. Please try again.")
+            await update.message.reply_text(
+                "❌ Sorry, an error occurred. Please try again."
+            )
 
     async def cmd_reset(self, update: Update, context: CallbackContext):
         """
@@ -169,7 +274,9 @@ class TelegramBot:
         try:
             # Check if this is from target chat
             if not self._is_target_chat(update.effective_chat.id):
-                self.logger.warning(f"Message from non-target chat {update.effective_chat.id} ignored")
+                self.logger.warning(
+                    f"Message from non-target chat {update.effective_chat.id} ignored"
+                )
                 return
 
             await self._ensure_ncrew_initialized()
@@ -183,7 +290,9 @@ class TelegramBot:
 
         except Exception as e:
             self.logger.error(f"Error in /reset command: {e}")
-            await update.message.reply_text("❌ Sorry, an error occurred while resetting conversation.")
+            await update.message.reply_text(
+                "❌ Sorry, an error occurred while resetting conversation."
+            )
 
     async def cmd_status(self, update: Update, context: CallbackContext):
         """
@@ -199,13 +308,15 @@ class TelegramBot:
             agent_status = await self.ncrew.get_agent_status()
             status_msg = format_status_message(agent_status)
 
-            await update.message.reply_text(status_msg, parse_mode='Markdown')
+            await update.message.reply_text(status_msg, parse_mode="Markdown")
 
             self.logger.info(f"User {update.effective_user.id} requested status")
 
         except Exception as e:
             self.logger.error(f"Error in /status command: {e}")
-            await update.message.reply_text("❌ Sorry, an error occurred while getting status.")
+            await update.message.reply_text(
+                "❌ Sorry, an error occurred while getting status."
+            )
 
     async def cmd_metrics(self, update: Update, context: CallbackContext):
         """
@@ -221,19 +332,21 @@ class TelegramBot:
             metrics = self.ncrew.get_metrics()
             metrics_msg = f"""📊 **Performance Metrics**
 
-🔄 **Agent Calls:** {metrics['total_agent_calls']}
-⏱️ **Total Response Time:** {metrics['total_response_time']:.2f}s
-📈 **Average Response Time:** {metrics['average_response_time']:.2f}s
-💬 **Conversations Processed:** {metrics['conversations_processed']}
-📝 **Messages Processed:** {metrics['messages_processed']}"""
+🔄 **Agent Calls:** {metrics["total_agent_calls"]}
+⏱️ **Total Response Time:** {metrics["total_response_time"]:.2f}s
+📈 **Average Response Time:** {metrics["average_response_time"]:.2f}s
+💬 **Conversations Processed:** {metrics["conversations_processed"]}
+📝 **Messages Processed:** {metrics["messages_processed"]}"""
 
-            await update.message.reply_text(metrics_msg, parse_mode='Markdown')
+            await update.message.reply_text(metrics_msg, parse_mode="Markdown")
 
             self.logger.info(f"User {update.effective_user.id} requested metrics")
 
         except Exception as e:
             self.logger.error(f"Error in /metrics command: {e}")
-            await update.message.reply_text("❌ Sorry, an error occurred while getting metrics.")
+            await update.message.reply_text(
+                "❌ Sorry, an error occurred while getting metrics."
+            )
 
     async def cmd_about(self, update: Update, context: CallbackContext):
         """
@@ -259,7 +372,7 @@ class TelegramBot:
                 "*Currently in MVP development phase*"
             )
 
-            await update.message.reply_text(about_msg, parse_mode='Markdown')
+            await update.message.reply_text(about_msg, parse_mode="Markdown")
 
             self.logger.info(f"User {update.effective_user.id} requested about")
 
@@ -288,24 +401,30 @@ class TelegramBot:
             # Format agent information
             lines = [f"🤖 **Agent Sequence for Your Chat**"]
             lines.append(f"📍 Current: {agent_info.get('current_agent', 'Unknown')}")
-            lines.append(f"🔄 Position: {agent_info.get('agent_index', 0) + 1}/{agent_info.get('total_agents', 0)}")
+            lines.append(
+                f"🔄 Position: {agent_info.get('agent_index', 0) + 1}/{agent_info.get('total_agents', 0)}"
+            )
             lines.append("")
 
             lines.append("**Next Agents:**")
-            for i, agent in enumerate(agent_info.get('next_agents', [])[:3]):
-                emoji = "✅" if agent['available'] else "❌"
+            for i, agent in enumerate(agent_info.get("next_agents", [])[:3]):
+                emoji = "✅" if agent["available"] else "❌"
                 arrow = "→" if i == 0 else "⤷️"
-                status = "Available" if agent['available'] else "Unavailable"
+                status = "Available" if agent["available"] else "Unavailable"
                 lines.append(f"{emoji} {arrow} {agent['name']} ({status})")
 
             msg = "\n".join(lines)
-            await update.message.reply_text(msg, parse_mode='Markdown')
+            await update.message.reply_text(msg, parse_mode="Markdown")
 
-            self.logger.info(f"User {update.effective_user.id} requested agent information")
+            self.logger.info(
+                f"User {update.effective_user.id} requested agent information"
+            )
 
         except Exception as e:
             self.logger.error(f"Error in /agents command: {e}")
-            await update.message.reply_text("❌ Sorry, an error occurred while getting agent information.")
+            await update.message.reply_text(
+                "❌ Sorry, an error occurred while getting agent information."
+            )
 
     async def cmd_next_agent(self, update: Update, context: CallbackContext):
         """
@@ -329,14 +448,18 @@ class TelegramBot:
                 if agent_info:
                     msg += f"\n📍 **Sequence position:** {agent_info.get('agent_index', 0) + 1}/{agent_info.get('total_agents', 0)}"
 
-                await update.message.reply_text(msg, parse_mode='Markdown')
-                self.logger.info(f"User {update.effective_user.id} switched to agent: {next_agent}")
+                await update.message.reply_text(msg, parse_mode="Markdown")
+                self.logger.info(
+                    f"User {update.effective_user.id} switched to agent: {next_agent}"
+                )
             else:
                 await update.message.reply_text("❌ No agents available to switch to.")
 
         except Exception as e:
             self.logger.error(f"Error in /next command: {e}")
-            await update.message.reply_text("❌ Sorry, an error occurred while switching agents.")
+            await update.message.reply_text(
+                "❌ Sorry, an error occurred while switching agents."
+            )
 
     async def handle_message(self, update: Update, context: CallbackContext):
         """
@@ -349,25 +472,35 @@ class TelegramBot:
         try:
             # Check if this is from target chat
             if not self._is_target_chat(update.effective_chat.id):
-                self.logger.warning(f"Message from non-target chat {update.effective_chat.id} ignored")
+                self.logger.warning(
+                    f"Message from non-target chat {update.effective_chat.id} ignored"
+                )
                 return
 
             await self._ensure_ncrew_initialized()
 
             chat_id = update.effective_chat.id
             user_text = update.message.text
-            user_name = update.effective_user.first_name or update.effective_user.username
+            user_name = (
+                update.effective_user.first_name or update.effective_user.username
+            )
 
             # Security validation of input
             is_valid, error_msg = validate_input(user_text, "message")
             if not is_valid:
-                self.logger.warning(f"Security check failed for message from {user_name} ({chat_id}): {error_msg}")
-                await update.message.reply_text("❌ Your message contains potentially dangerous content and was rejected for security reasons.")
+                self.logger.warning(
+                    f"Security check failed for message from {user_name} ({chat_id}): {error_msg}"
+                )
+                await update.message.reply_text(
+                    "❌ Your message contains potentially dangerous content and was rejected for security reasons."
+                )
                 return
 
             # Sanitize message for logging
             sanitized_message = sanitize_for_logging(user_text)
-            self.logger.info(f"Message from {user_name} ({chat_id}): {sanitized_message[:100]}...")
+            self.logger.info(
+                f"Message from {user_name} ({chat_id}): {sanitized_message[:100]}..."
+            )
 
             processing_msg = None
 
@@ -376,42 +509,33 @@ class TelegramBot:
                 # Iterate over async generator to get responses from all roles
                 role_responses_sent = 0
 
-                async for role_config, raw_response in self.ncrew.handle_message(chat_id, user_text):
+                async for role_config, raw_response in self.ncrew.handle_message(
+                    chat_id, user_text
+                ):
                     # Delete initial processing message on first response
                     if role_config and raw_response:
                         # Успешный ответ от роли
-                        # Get bot token from role config
-                        bot_lookup_name = role_config.telegram_bot_name
-                        agent_token = Config.TELEGRAM_BOT_TOKENS.get(bot_lookup_name)
-                        self.logger.info(f"Token lookup: bot_lookup_name={bot_lookup_name}, agent_token_found={bool(agent_token)}")
-
                         display_name = role_config.display_name
-                        formatted_response = format_agent_response(display_name, raw_response)
-                        messages_to_send = split_long_message(formatted_response, max_length=Config.TELEGRAM_MAX_MESSAGE_LENGTH)
+                        formatted_response = format_agent_response(
+                            display_name, raw_response
+                        )
+                        messages_to_send = split_long_message(
+                            formatted_response,
+                            max_length=Config.TELEGRAM_MAX_MESSAGE_LENGTH,
+                        )
 
-                        if agent_token:
-                            with ProxyManager():
-                                actor_bot = Bot(token=agent_token)
-                                for msg in messages_to_send:
-                                    try:
-                                        await actor_bot.send_message(
-                                            chat_id=Config.TARGET_CHAT_ID,
-                                            text=msg,
-                                            parse_mode='Markdown'
-                                        )
-                                        self.logger.info(f"Sent response from {display_name} ({bot_lookup_name}) via actor bot")
-                                    except Exception as send_error:
-                                        self.logger.error(f"Error sending message via actor bot {display_name} ({bot_lookup_name}): {send_error}")
-                                        try:
-                                            await actor_bot.send_message(chat_id=Config.TARGET_CHAT_ID, text=msg)
-                                        except Exception as fallback_error:
-                                            self.logger.error(f"Critical error sending via actor bot: {fallback_error}")
-                                            await update.message.reply_text(f"❌ Error sending from {display_name} bot. Response:\n{raw_response}")
-                                            break
-                        else:
+                        sent_via_actor = await self._send_role_messages_via_actor(
+                            role_config, messages_to_send
+                        )
+                        if not sent_via_actor:
                             for chunk in messages_to_send:
-                                await update.message.reply_text(chunk, parse_mode='Markdown')
-                            self.logger.warning(f"No actor token for role {role_config.role_name}, sent response via listener bot.")
+                                await update.message.reply_text(
+                                    chunk, parse_mode="Markdown"
+                                )
+                            self.logger.warning(
+                                "Failed to deliver via actor bot for role %s, sent response via listener bot.",
+                                role_config.role_name,
+                            )
 
                         role_responses_sent += 1
 
@@ -431,8 +555,12 @@ class TelegramBot:
                     pass
 
                 if role_responses_sent > 0:
-                    await update.message.reply_text("💬 Команда завершила свою работу. Жду ваших дальнейших указаний.")
-                    self.logger.info(f"Autonomous dialogue cycle completed for chat {chat_id} with {role_responses_sent} role responses")
+                    await update.message.reply_text(
+                        "💬 Команда завершила свою работу. Жду ваших дальнейших указаний."
+                    )
+                    self.logger.info(
+                        f"Autonomous dialogue cycle completed for chat {chat_id} with {role_responses_sent} role responses"
+                    )
                 else:
                     self.logger.warning(f"No role responses sent for chat {chat_id}")
 
@@ -456,7 +584,9 @@ class TelegramBot:
         except Exception as e:
             self.logger.error(f"Error in handle_message: {e}")
             try:
-                await update.message.reply_text("❌ Sorry, an unexpected error occurred.")
+                await update.message.reply_text(
+                    "❌ Sorry, an unexpected error occurred."
+                )
             except:
                 pass
 
@@ -491,14 +621,24 @@ class TelegramBot:
             system_status = await self.ncrew.get_system_status()
 
             status_lines = ["🔍 **System Status**"]
-            status_lines.append(f"📊 Total chats: {system_status.get('total_chats', 0)}")
-            status_lines.append(f"💬 Total messages: {system_status.get('total_messages', 0)}")
-            status_lines.append(f"💾 Storage size: {system_status.get('storage_size_mb', 0)} MB")
-            status_lines.append(f"🤖 Available agents: {system_status.get('available_agents', 0)}/{system_status.get('configured_agents', 0)}")
+            status_lines.append(
+                f"📊 Total chats: {system_status.get('total_chats', 0)}"
+            )
+            status_lines.append(
+                f"💬 Total messages: {system_status.get('total_messages', 0)}"
+            )
+            status_lines.append(
+                f"💾 Storage size: {system_status.get('storage_size_mb', 0)} MB"
+            )
+            status_lines.append(
+                f"🤖 Available agents: {system_status.get('available_agents', 0)}/{system_status.get('configured_agents', 0)}"
+            )
 
             status_msg = "\n".join(status_lines)
 
-            await self.application.bot.send_message(chat_id, status_msg, parse_mode='Markdown')
+            await self.application.bot.send_message(
+                chat_id, status_msg, parse_mode="Markdown"
+            )
 
         except Exception as e:
             self.logger.error(f"Error sending system status: {e}")
@@ -524,7 +664,7 @@ class TelegramBot:
             raise
         finally:
             self.logger.info("Bot shutdown complete")
-    
+
     async def shutdown(self):
         """Gracefully shut down the bot and any associated resources with reduced logging."""
         self.logger.info("Shutting down Telegram bot...")
@@ -539,9 +679,9 @@ class TelegramBot:
 
             # Step 2: Stop the application
             try:
-                if hasattr(self.application, 'stop'):
+                if hasattr(self.application, "stop"):
                     await self.application.stop()
-                elif hasattr(self.application, 'stop_running'):
+                elif hasattr(self.application, "stop_running"):
                     self.application.stop_running()
             except Exception as e:
                 self.logger.debug(f"Error stopping application: {e}")
@@ -572,6 +712,7 @@ def main():
     return 0
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     import sys
+
     sys.exit(main())
