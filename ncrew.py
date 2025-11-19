@@ -56,15 +56,6 @@ class NeuroCrewLab:
 
         self._shutdown_in_progress: bool = False
 
-        # Performance metrics
-        self.metrics = {
-            "total_agent_calls": 0,
-            "total_response_time": 0.0,
-            "average_response_time": 0.0,
-            "conversations_processed": 0,
-            "messages_processed": 0,
-        }
-
         # Role-based mode is REQUIRED
         if not self.is_role_based:
             raise RuntimeError(
@@ -237,7 +228,6 @@ class NeuroCrewLab:
     def _validate_cli_command(self, cli_command):
         """Validate CLI command is available."""
         try:
-            import subprocess
             import shlex
 
             # Extract base command (remove arguments)
@@ -262,76 +252,6 @@ class NeuroCrewLab:
             return token is not None and len(token.strip()) > 0
         except Exception:
             return False
-
-    def _filter_valid_roles(self) -> List[RoleConfig]:
-        """
-        Filter roles to only include those with valid CLI commands AND bot tokens.
-
-        Returns:
-            List[RoleConfig]: Filtered list of valid roles
-        """
-        if not self.is_role_based:
-            return []
-
-        valid_roles = []
-        for role in self.roles:
-            self.logger.debug(f"Validating role resources: {role.role_name}")
-            # Check CLI command availability
-            cli_command = role.cli_command
-            if not cli_command:
-                self.logger.warning(f"Role {role.role_name}: no CLI command configured")
-                continue
-
-            # Check bot token availability (new format only)
-            bot_token = Config.TELEGRAM_BOT_TOKENS.get(role.telegram_bot_name)
-            if not bot_token:
-                self.logger.warning(
-                    f"Role {role.role_name}: no bot token configured for {role.telegram_bot_name}"
-                )
-                continue
-
-            # Check if token is a placeholder/invalid
-            placeholder_patterns = [
-                "your_",
-                "placeholder",
-                "token_here",
-                "bot_token",
-                "example",
-                "test_",
-                "none",
-                "null",
-                "undefined",
-            ]
-            token_lower = bot_token.lower()
-            if any(pattern in token_lower for pattern in placeholder_patterns):
-                self.logger.warning(
-                    f"Role {role.role_name}: bot token appears to be placeholder for {role.telegram_bot_name}"
-                )
-                continue
-
-            # Test CLI availability (quick check)
-            try:
-                import subprocess
-                import os
-
-                result = subprocess.run(
-                    [cli_command, "--version"],
-                    capture_output=True,
-                    text=True,
-                    timeout=5,
-                    env=os.environ.copy(),
-                )
-                if result.returncode == 0:
-                    valid_roles.append(role)
-                    self.logger.info(
-                        f"Role {role.role_name}: ✅ CLI available, ✅ Token configured"
-                    )
-                else:
-                    self.logger.warning(f"Role {role.role_name}: CLI command failed")
-            except Exception as e:
-                self.logger.warning(f"Role {role.role_name}: CLI check failed: {e}")
-
-        return valid_roles
 
     async def initialize(self):
         """
@@ -364,10 +284,6 @@ class NeuroCrewLab:
                 f"Initialized {len(self.roles)} validated roles ready for stateful execution"
             )
 
-    # Legacy _filter_valid_agents method removed - we use role-based stateful connectors only
-
-    # Legacy initialize_connectors method removed - we use stateful role sessions instead
-
     async def handle_message(
         self, chat_id: int, user_text: str
     ) -> AsyncGenerator[Tuple[Optional[RoleConfig], str], None]:
@@ -399,139 +315,129 @@ class NeuroCrewLab:
                 yield (None, "❌ Error: Could not save your message")
                 return
 
-            # Update conversation metrics
-            self.metrics["conversations_processed"] += 1
-            self.metrics["messages_processed"] += 1
-
-            # --- НАЧАЛО НЕПРЕРЫВНОГО АВТОНОМНОГО ЦИКЛА ---
-            # Continue cycling through roles indefinitely, building conversation context
-            # Stop only when ALL agents have nothing to say (respond with ".....")
-
-            self.logger.info(
-                f"Starting continuous cycle with {len(self.roles)} validated roles"
-            )
-            cycle_count = 0
-            consecutive_empty_responses = 0  # Считаем последовательные ответы "....."
-            consecutive_error_responses = 0
-            MAX_CYCLES = 20
-
-            while cycle_count < MAX_CYCLES:  # Цикл с ограничением итераций
-                self.logger.debug(
-                    "Chat %s: top of loop, roles=%s, pointer=%s",
-                    chat_id,
-                    [r.role_name for r in self.roles],
-                    self.chat_role_pointers.get(chat_id, 0),
-                )
-
-                if self._shutdown_in_progress:
-                    self.logger.info(
-                        f"Shutdown requested, stopping dialogue cycle for chat {chat_id}"
-                    )
-                    break
-
-                cycle_count += 1
-                self.logger.info(f"--- Cycle {cycle_count} ---")
-
-                # Get next role using round-robin pointer
-                current_role_index = self.chat_role_pointers.get(chat_id, 0)
-                role_config = self.roles[current_role_index]
-
-                self.logger.info(
-                    f"Активация роли {cycle_count}: {role_config.role_name}"
-                )
-
-                # Check availability and launch if needed
-                connector = self._get_or_create_role_connector(chat_id, role_config)
-                if not connector.is_alive():
-                    try:
-                        await connector.launch(
-                            role_config.cli_command, role_config.system_prompt
-                        )
-                        self.logger.info(
-                            f"Launched role process: {role_config.role_name}"
-                        )
-                    except Exception as e:
-                        self.logger.error(
-                            f"Не удалось запустить роль {role_config.role_name}: {e}"
-                        )
-                        # Move to next role and continue
-                        self.chat_role_pointers[chat_id] = (
-                            current_role_index + 1
-                        ) % len(self.roles)
-                        continue
-
-                # Process with current role
-                self.logger.debug(
-                    f"Chat {chat_id}: invoking _process_with_role for {role_config.role_name}"
-                )
-                raw_response = await self._process_with_role(chat_id, role_config)
-                self.logger.debug(
-                    f"Chat {chat_id}: role {role_config.role_name} produced "
-                    f"{len(raw_response)} chars"
-                )
-
-                # Update pointer for next cycle
-                self.chat_role_pointers[chat_id] = (current_role_index + 1) % len(
-                    self.roles
-                )
-
-                # Check for termination condition: ровно 5 точек
-                if raw_response.strip() == ".....":
-                    consecutive_empty_responses += 1
-                    consecutive_error_responses = 0
-                    self.logger.info(
-                        f"Роль {role_config.role_name} не имеет ничего добавить ({consecutive_empty_responses}/{len(self.roles)})."
-                    )
-
-                    # Если ВСЕ агенты подряд ответили "....." - завершаем диалог
-                    if consecutive_empty_responses >= len(self.roles):
-                        self.logger.info(
-                            f"Все {len(self.roles)} агентов завершили диалог. Цикл остановлен."
-                        )
-                        yield (None, "Ожидаем новое сообщение от пользователя.")
-                        break
-                    else:
-                        # Продолжаем цикл, но не отправляем response в Telegram
-                        continue
-
-                # Reset counter when we get meaningful response
-                consecutive_empty_responses = 0
-
-                # Check for error responses - they don't count towards termination
-                if (
-                    raw_response.startswith("❌ Error:")
-                    or raw_response == "I'm sorry, I don't have a response for that."
-                ):
-                    self.logger.warning(
-                        f"Role {role_config.role_name} returned error response "
-                        f"(length={len(raw_response)}). Continuing to next role."
-                    )
-                    consecutive_error_responses += 1
-                    yield (role_config, raw_response)
-
-                    if consecutive_error_responses >= len(self.roles):
-                        self.logger.error(
-                            "All roles returned error responses in this cycle. Stopping dialogue."
-                        )
-                        break
-                    continue
-                else:
-                    consecutive_error_responses = 0
-
-                # Yield the response for Telegram sending (только meaningful responses)
-                yield (role_config, raw_response)
-
-            self.logger.info(
-                f"Continuous autonomous cycle completed after {cycle_count} iterations for chat {chat_id}"
-            )
+            # Run the autonomous cycle
+            async for result in self._run_autonomous_cycle(chat_id):
+                yield result
 
         except Exception as e:
-            error_msg = f"Error in continuous autonomous dialogue cycle: {e}"
+            error_msg = f"Error in handle_message: {e}"
             self.logger.error(error_msg)
             yield (
                 None,
-                f"❌ Error: Something went wrong during the autonomous dialogue cycle",
+                f"❌ Error: Something went wrong during message processing",
             )
+
+    async def _run_autonomous_cycle(
+        self, chat_id: int
+    ) -> AsyncGenerator[Tuple[Optional[RoleConfig], str], None]:
+        """
+        Execute the autonomous dialogue cycle where agents talk to each other.
+
+        The cycle continues until all agents have "passed" (responded with ".....").
+        There is NO hard limit on the number of cycles in this MVP.
+        """
+        self.logger.info(
+            f"Starting continuous cycle with {len(self.roles)} validated roles"
+        )
+
+        cycle_count = 0
+        consecutive_empty_responses = 0  # Count consecutive "....." responses
+        consecutive_error_responses = 0
+
+        while True:
+            if self._shutdown_in_progress:
+                self.logger.info(
+                    f"Shutdown requested, stopping dialogue cycle for chat {chat_id}"
+                )
+                break
+
+            cycle_count += 1
+            self.logger.info(f"--- Cycle {cycle_count} ---")
+
+            # Get next role using round-robin pointer
+            current_role_index = self.chat_role_pointers.get(chat_id, 0)
+            role_config = self.roles[current_role_index]
+
+            self.logger.info(f"Activating role {cycle_count}: {role_config.role_name}")
+
+            # Check availability and launch if needed
+            connector = self._get_or_create_role_connector(chat_id, role_config)
+            if not connector.is_alive():
+                try:
+                    await connector.launch(
+                        role_config.cli_command, role_config.system_prompt
+                    )
+                    self.logger.info(f"Launched role process: {role_config.role_name}")
+                except Exception as e:
+                    self.logger.error(
+                        f"Failed to launch role {role_config.role_name}: {e}"
+                    )
+                    # Move to next role and continue
+                    self.chat_role_pointers[chat_id] = (current_role_index + 1) % len(
+                        self.roles
+                    )
+                    continue
+
+            # Process with current role
+            self.logger.debug(
+                f"Chat {chat_id}: invoking _process_with_role for {role_config.role_name}"
+            )
+            raw_response = await self._process_with_role(chat_id, role_config)
+
+            # Update pointer for next cycle
+            self.chat_role_pointers[chat_id] = (current_role_index + 1) % len(
+                self.roles
+            )
+
+            # Check for termination condition: exactly 5 dots
+            if raw_response.strip() == ".....":
+                consecutive_empty_responses += 1
+                consecutive_error_responses = 0
+                self.logger.info(
+                    f"Role {role_config.role_name} has nothing to add ({consecutive_empty_responses}/{len(self.roles)})."
+                )
+
+                # If ALL agents consecutively responded with ".....", end the dialogue
+                if consecutive_empty_responses >= len(self.roles):
+                    self.logger.info(
+                        f"All {len(self.roles)} agents finished dialogue. Cycle stopped."
+                    )
+                    # We don't yield a specific message here, just break
+                    # The caller will handle completion
+                    break
+                else:
+                    # Continue cycle, but don't send response to Telegram
+                    continue
+
+            # Reset counter when we get meaningful response
+            consecutive_empty_responses = 0
+
+            # Check for error responses - they don't count towards termination
+            if (
+                raw_response.startswith("❌ Error:")
+                or raw_response == "I'm sorry, I don't have a response for that."
+            ):
+                self.logger.warning(
+                    f"Role {role_config.role_name} returned error response. Continuing to next role."
+                )
+                consecutive_error_responses += 1
+                yield (role_config, raw_response)
+
+                if consecutive_error_responses >= len(self.roles):
+                    self.logger.error(
+                        "All roles returned error responses in this cycle. Stopping dialogue."
+                    )
+                    break
+                continue
+            else:
+                consecutive_error_responses = 0
+
+            # Yield the response for Telegram sending (only meaningful responses)
+            yield (role_config, raw_response)
+
+        self.logger.info(
+            f"Continuous autonomous cycle completed after {cycle_count} iterations for chat {chat_id}"
+        )
 
     async def _get_next_role(self, chat_id: int) -> Optional[RoleConfig]:
         """
@@ -580,13 +486,6 @@ class NeuroCrewLab:
                 roles_tried += 1
 
                 self.logger.error("No roles are available")
-                self.logger.debug(
-                    "Role validation state: %s",
-                    {
-                        "roles": [r.role_name for r in self.roles],
-                        "pointer": self.chat_role_pointers.get(chat_id),
-                    },
-                )
                 return None
 
         except Exception as e:
@@ -607,17 +506,13 @@ class NeuroCrewLab:
         try:
             self.logger.info(f"Processing with role: {role.role_name}")
 
-            self.logger.debug(
-                f"Chat {chat_id}: loading conversation history for role {role.role_name}"
-            )
             # Get full conversation history for context
             conversation = await self.storage.load_conversation(chat_id)
-            self.logger.debug(
-                f"Chat {chat_id}: history contains {len(conversation)} messages"
-            )
 
             key = (chat_id, role.role_name)
             last_seen_index = self.role_last_seen_index.get(key, 0)
+
+            # Safety check: if index is out of bounds, reset to reasonable default (last few messages)
             if last_seen_index < 0 or last_seen_index > len(conversation):
                 last_seen_index = max(len(conversation) - 6, 0)
 
@@ -643,13 +538,10 @@ class NeuroCrewLab:
                 # Execute with retry logic for basic error recovery
                 max_retries = 2
                 response = None
-                response_time = 0
 
                 for attempt in range(max_retries):
                     try:
-                        start_time = time.time()
                         response = await role_connector.execute(role_prompt)
-                        response_time = time.time() - start_time
                         break  # Success, exit retry loop
                     except Exception as e:
                         self.logger.warning(
@@ -663,18 +555,7 @@ class NeuroCrewLab:
                             # All retries failed
                             raise e
 
-                # Update performance metrics
-                self.metrics["total_agent_calls"] += 1
-                self.metrics["total_response_time"] += response_time
-                self.metrics["average_response_time"] = (
-                    self.metrics["total_response_time"]
-                    / self.metrics["total_agent_calls"]
-                )
-
-                self.logger.info(
-                    f"Role {role.role_name} response time: {response_time:.2f}s"
-                )
-                self.logger.debug(f"Stateful execution with role: {role.role_name}")
+                self.logger.info(f"Role {role.role_name} responded successfully")
             else:
                 response = "....."
                 self.logger.debug(
@@ -706,7 +587,6 @@ class NeuroCrewLab:
                         self.role_response_count.get(role_key, 0) + 1
                     )
 
-            self.logger.info(f"Role {role.role_name} processed message successfully")
             return response
 
         except Exception as e:
@@ -768,14 +648,6 @@ class NeuroCrewLab:
             conversation_context = system_reminder + conversation_context
 
         prompt = conversation_context
-
-        self.logger.debug(
-            "Context for %s built from %d filtered messages (prompt len %d, response_count %d)",
-            role.role_name,
-            len(filtered_messages),
-            len(prompt),
-            response_count,
-        )
         return prompt, True
 
     async def _reset_chat_role_sessions(self, chat_id: int) -> None:
@@ -1106,10 +978,9 @@ class NeuroCrewLab:
         """
         Get performance metrics for the NeuroCrew Lab instance.
 
-        Returns:
-            Dict[str, Any]: Performance metrics
+        Returns empty dict as metrics are disabled in MVP.
         """
-        return self.metrics.copy()
+        return {}
 
     async def set_agent_sequence(self, chat_id: int, role_sequence: List[str]) -> bool:
         """
@@ -1334,7 +1205,7 @@ class NeuroCrewLab:
                                 if hasattr(connector, "process") and connector.process:
                                     connector.process.terminate()
                                     await asyncio.sleep(0.5)  # Reduced wait time
-                                    if connector.process.poll() is None:
+                                    if connector.process.returncode is None:
                                         connector.process.kill()
                             except Exception as e:
                                 self.logger.debug(

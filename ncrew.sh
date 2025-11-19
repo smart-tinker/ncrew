@@ -102,69 +102,6 @@ install_dependencies() {
     fi
 }
 
-# Check CLI agents
-check_cli_agents() {
-    print_info "Checking CLI agents availability..."
-
-    local qwen_available=false
-    local gemini_available=false
-
-    # Check Qwen
-    if command -v qwen >/dev/null 2>&1; then
-        qwen_version=$(qwen --version 2>/dev/null || echo "installed")
-        print_success "Qwen CLI: $qwen_version"
-        qwen_available=true
-    else
-        print_warning "Qwen CLI not found"
-
-        # Try to install via npm if available
-        if command -v npm >/dev/null 2>&1; then
-            print_info "Installing Qwen CLI via npm..."
-            npm install -g @qwen-code/qwen-code
-            if [[ $? -eq 0 ]]; then
-                print_success "Qwen CLI installed via npm"
-                qwen_available=true
-            else
-                print_error "Failed to install Qwen CLI via npm"
-            fi
-        else
-            print_error "npm not found. Please install Qwen CLI manually"
-        fi
-    fi
-
-    # Check Gemini
-    if command -v gemini >/dev/null 2>&1; then
-        gemini_version=$(gemini --version 2>/dev/null || echo "installed")
-        print_success "Gemini CLI: $gemini_version"
-        gemini_available=true
-    else
-        print_warning "Gemini CLI not found"
-
-        # Try to install via npm if available
-        if command -v npm >/dev/null 2>&1; then
-            print_info "Installing Gemini CLI via npm..."
-            npm install -g @gemini-code/gemini-code
-            if [[ $? -eq 0 ]]; then
-                print_success "Gemini CLI installed via npm"
-                gemini_available=true
-            else
-                print_error "Failed to install Gemini CLI via npm"
-            fi
-        else
-            print_error "npm not found. Please install Gemini CLI manually"
-        fi
-    fi
-
-    # Summary
-    if [[ "$qwen_available" == true && "$gemini_available" == true ]]; then
-        print_success "Both CLI agents are available"
-        return 0
-    else
-        print_warning "Some CLI agents may not be available"
-        return 1
-    fi
-}
-
 # Setup configuration
 setup_configuration() {
     print_info "Setting up configuration..."
@@ -232,11 +169,6 @@ main() {
 
     # Install dependencies
     install_dependencies
-
-    # Check CLI agents
-    if ! check_cli_agents; then
-        print_warning "Some CLI agents may not be available. Continuing anyway..."
-    fi
 
     # Setup configuration
     if ! setup_configuration; then

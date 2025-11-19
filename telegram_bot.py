@@ -27,6 +27,7 @@ from utils.formatters import (
     format_status_message,
     format_agent_response,
     split_long_message,
+    format_telegram_message,
 )
 from utils.security import validate_input, sanitize_for_logging
 
@@ -87,8 +88,10 @@ class TelegramBot:
             return
 
         for role_config, intro_text in introductions:
+            # Escape introduction text
+            safe_intro = format_telegram_message(intro_text)
             formatted_intro = format_agent_response(
-                role_config.display_name, intro_text
+                role_config.display_name, safe_intro
             )
             messages_to_send = split_long_message(
                 formatted_intro, max_length=Config.TELEGRAM_MAX_MESSAGE_LENGTH
@@ -103,8 +106,11 @@ class TelegramBot:
                     role_config.role_name,
                 )
                 for chunk in messages_to_send:
+                    # chunk is already formatted and escaped
                     await self.application.bot.send_message(
-                        chat_id=Config.TARGET_CHAT_ID, text=chunk, parse_mode="Markdown"
+                        chat_id=Config.TARGET_CHAT_ID,
+                        text=chunk,
+                        parse_mode="MarkdownV2",
                     )
 
             await asyncio.sleep(1.5)
@@ -184,8 +190,9 @@ class TelegramBot:
         actor_bot = Bot(token=agent_token)
         for msg in messages:
             try:
+                # msg is already formatted and escaped by caller
                 await actor_bot.send_message(
-                    chat_id=Config.TARGET_CHAT_ID, text=msg, parse_mode="Markdown"
+                    chat_id=Config.TARGET_CHAT_ID, text=msg, parse_mode="MarkdownV2"
                 )
                 self.logger.info(
                     "Sent response from %s (%s) via actor bot",
@@ -516,8 +523,10 @@ class TelegramBot:
                     if role_config and raw_response:
                         # Успешный ответ от роли
                         display_name = role_config.display_name
+                        # Escape and format agent response before splitting
+                        safe_response = format_telegram_message(raw_response)
                         formatted_response = format_agent_response(
-                            display_name, raw_response
+                            display_name, safe_response
                         )
                         messages_to_send = split_long_message(
                             formatted_response,
@@ -529,8 +538,9 @@ class TelegramBot:
                         )
                         if not sent_via_actor:
                             for chunk in messages_to_send:
+                                # chunk is already formatted and escaped
                                 await update.message.reply_text(
-                                    chunk, parse_mode="Markdown"
+                                    chunk, parse_mode="MarkdownV2"
                                 )
                             self.logger.warning(
                                 "Failed to deliver via actor bot for role %s, sent response via listener bot.",

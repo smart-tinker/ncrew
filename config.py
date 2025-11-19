@@ -156,7 +156,7 @@ class Config:
 
     # System Configuration
     MAX_CONVERSATION_LENGTH: int = int(os.getenv("MAX_CONVERSATION_LENGTH", "50"))
-    AGENT_TIMEOUT: int = int(os.getenv("AGENT_TIMEOUT", "120"))
+    AGENT_TIMEOUT: int = int(os.getenv("AGENT_TIMEOUT", "600"))
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO").upper()
     DATA_DIR: Path = Path(os.getenv("DATA_DIR", "./data"))
 

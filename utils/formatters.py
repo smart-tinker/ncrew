@@ -6,10 +6,13 @@ and other output formats.
 """
 
 import textwrap
+import re
 from typing import List
 
 
-def split_long_message(text: str, max_length: int = 4096, threshold: int = 4000) -> List[str]:
+def split_long_message(
+    text: str, max_length: int = 4096, threshold: int = 4000
+) -> List[str]:
     """
     Split a long message into multiple smaller messages for Telegram.
 
@@ -25,7 +28,7 @@ def split_long_message(text: str, max_length: int = 4096, threshold: int = 4000)
         return [text]
 
     # Split by paragraphs first
-    paragraphs = text.split('\n\n')
+    paragraphs = text.split("\n\n")
     messages = []
     current_message = ""
 
@@ -37,7 +40,7 @@ def split_long_message(text: str, max_length: int = 4096, threshold: int = 4000)
                 current_message = paragraph
             else:
                 # Single paragraph too long, split by lines
-                lines = paragraph.split('\n')
+                lines = paragraph.split("\n")
                 for line in lines:
                     if len(current_message) + len(line) + 1 > threshold:
                         if current_message:
@@ -45,12 +48,12 @@ def split_long_message(text: str, max_length: int = 4096, threshold: int = 4000)
                         current_message = line
                     else:
                         if current_message:
-                            current_message += '\n' + line
+                            current_message += "\n" + line
                         else:
                             current_message = line
         else:
             if current_message:
-                current_message += '\n\n' + paragraph
+                current_message += "\n\n" + paragraph
             else:
                 current_message = paragraph
 
@@ -64,7 +67,7 @@ def split_long_message(text: str, max_length: int = 4096, threshold: int = 4000)
         if len(message) > max_length:
             # Split into chunks with strict length enforcement
             for i in range(0, len(message), max_length):
-                chunk = message[i:i + max_length]
+                chunk = message[i : i + max_length]
                 final_messages.append(chunk)
         else:
             final_messages.append(message)
@@ -72,7 +75,7 @@ def split_long_message(text: str, max_length: int = 4096, threshold: int = 4000)
     # Add part indicators if multiple messages and ensure length constraints
     if len(final_messages) > 1:
         for i in range(len(final_messages)):
-            part_indicator = f"({i+1}/{len(final_messages)}) "
+            part_indicator = f"({i + 1}/{len(final_messages)}) "
             # If adding part indicator would exceed max_length, truncate the message
             if len(final_messages[i]) + len(part_indicator) > max_length:
                 max_content_length = max_length - len(part_indicator)
@@ -204,17 +207,55 @@ def format_help_message() -> str:
 
 def format_telegram_message(text: str) -> str:
     """
-    Format text for Telegram with proper escaping if needed.
+    Format text for Telegram MarkdownV2 with proper escaping outside code blocks.
+
+    Handles MarkdownV2 escaping requirements:
+    - Characters to escape: _ * [ ] ( ) ~ > # + - = | { } . !
+    - Preserves code blocks (```...```) and inline code (`...`)
 
     Args:
         text: Text to format
 
     Returns:
-        str: Telegram-formatted text
+        str: Telegram-formatted text (MarkdownV2 compatible)
     """
-    # For now, just return as-is
-    # In future, might need to escape certain characters
-    return text
+    if not text:
+        return ""
+
+    # Characters requiring escape in MarkdownV2 outside of code
+    escape_chars = r"_*[]()~>#+-=|{}.!"
+
+    # Split by code blocks (triple backticks)
+    # Use non-greedy match for content inside code blocks
+    # Flags=re.DOTALL ensures . matches newlines
+    parts = re.split(r"(```.*?```)", text, flags=re.DOTALL)
+
+    final_parts = []
+    for part in parts:
+        if part.startswith("```"):
+            # It's a code block - return as is
+            # Telegram handles unescaped chars inside code blocks (except ` and \)
+            # But usually we assume the input is "mostly" valid markdown
+            final_parts.append(part)
+        else:
+            # Process text outside code blocks
+            # Now split by inline code (single backticks)
+            # Note: This doesn't handle nested backticks or escaped backticks perfecty,
+            # but covers 99% of LLM output cases.
+            inline_parts = re.split(r"(`[^`\n]+`)", part)
+
+            for inline_part in inline_parts:
+                if inline_part.startswith("`"):
+                    # Inline code - return as is
+                    final_parts.append(inline_part)
+                else:
+                    # Regular text - escape special chars
+                    escaped = re.sub(
+                        f"([{re.escape(escape_chars)}])", r"\\\1", inline_part
+                    )
+                    final_parts.append(escaped)
+
+    return "".join(final_parts)
 
 
 def truncate_message(text: str, max_length: int = 100) -> str:
@@ -231,7 +272,7 @@ def truncate_message(text: str, max_length: int = 100) -> str:
     if len(text) <= max_length:
         return text
 
-    return text[:max_length-3] + "..."
+    return text[: max_length - 3] + "..."
 
 
 def sanitize_filename(filename: str) -> str:
@@ -247,10 +288,10 @@ def sanitize_filename(filename: str) -> str:
     # Replace invalid characters
     invalid_chars = '<>:"/\\|?*'
     for char in invalid_chars:
-        filename = filename.replace(char, '_')
+        filename = filename.replace(char, "_")
 
     # Remove leading/trailing spaces and dots
-    filename = filename.strip(' .')
+    filename = filename.strip(" .")
 
     # Ensure it's not empty
     if not filename:

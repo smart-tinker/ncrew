@@ -90,12 +90,25 @@ class CodexCLIConnector(BaseConnector):
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             cwd=os.getcwd(),
+            env=os.environ.copy(),
+            limit=2 * 1024 * 1024,  # 2MB limit for large JSON responses
         )
         stdout, stderr = await process.communicate()
         if process.returncode != 0:
-            raise RuntimeError(
-                f"Codex CLI failed: {stderr.decode().strip() or 'unknown error'}"
+            error_msg = (
+                stderr.decode().strip() or stdout.decode().strip() or "unknown error"
             )
+            # Try to parse JSON error if possible
+            try:
+                for line in error_msg.splitlines():
+                    if line.strip().startswith("{"):
+                        err_json = json.loads(line)
+                        if err_json.get("type") == "error":
+                            error_msg = err_json.get("error", error_msg)
+            except:
+                pass
+
+            raise RuntimeError(f"Codex CLI failed: {error_msg}")
 
         responses: List[str] = []
         for raw_line in stdout.decode().splitlines():

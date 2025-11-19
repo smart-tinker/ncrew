@@ -65,8 +65,7 @@ class ClaudeCLICodeConnector(BaseConnector):
         if not self.system_prompt:
             return
         primer = (
-            f"{self.system_prompt}\n\n"
-            "Confirm readiness with the single word READY."
+            f"{self.system_prompt}\n\nConfirm readiness with the single word READY."
         )
         try:
             await self._run_claude(primer)
@@ -92,10 +91,14 @@ class ClaudeCLICodeConnector(BaseConnector):
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             cwd=os.getcwd(),
+            env=os.environ.copy(),
+            limit=2 * 1024 * 1024,  # 2MB limit for large JSON responses
         )
         stdout, stderr = await process.communicate()
         if process.returncode != 0:
-            error = stderr.decode().strip() or stdout.decode().strip() or "unknown error"
+            error = (
+                stderr.decode().strip() or stdout.decode().strip() or "unknown error"
+            )
             raise RuntimeError(f"Claude CLI failed: {error}")
 
         responses: List[str] = []
@@ -116,7 +119,11 @@ class ClaudeCLICodeConnector(BaseConnector):
             elif event_type == "assistant":
                 message = event.get("message", {})
                 content = message.get("content", [])
-                text_parts = [chunk.get("text", "") for chunk in content if chunk.get("type") == "text"]
+                text_parts = [
+                    chunk.get("text", "")
+                    for chunk in content
+                    if chunk.get("type") == "text"
+                ]
                 text = "\n".join(filter(None, text_parts)).strip()
                 if text:
                     responses.append(text)

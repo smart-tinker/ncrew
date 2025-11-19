@@ -44,13 +44,11 @@ def telegram_bot():
         mock_config.is_role_based_enabled.return_value = True
         mock_config.get_available_roles.return_value = []
 
-        # Mock the proxy manager
-        with patch("telegram_bot.ProxyManager"):
-            with patch("telegram_bot.Application.builder") as mock_app_builder:
-                mock_app = MagicMock()
-                mock_app_builder.return_value.build.return_value = mock_app
-                bot = TelegramBot()
-                return bot
+        with patch("telegram_bot.Application.builder") as mock_app_builder:
+            mock_app = MagicMock()
+            mock_app_builder.return_value.build.return_value = mock_app
+            bot = TelegramBot()
+            return bot
 
 
 @pytest.mark.asyncio
@@ -134,39 +132,38 @@ async def test_start_command_with_real_config():
         mock_config.is_role_based_enabled.return_value = True
         mock_config.get_available_roles.return_value = []
 
-        # Mock the proxy manager and application builder
-        with patch("telegram_bot.ProxyManager"):
-            with patch("telegram_bot.Application.builder") as mock_app_builder:
-                mock_app = MagicMock()
-                mock_app_builder.return_value.build.return_value = mock_app
+        # Mock the application builder
+        with patch("telegram_bot.Application.builder") as mock_app_builder:
+            mock_app = MagicMock()
+            mock_app_builder.return_value.build.return_value = mock_app
 
-                # Create bot instance
-                bot = TelegramBot()
+            # Create bot instance
+            bot = TelegramBot()
 
-                # Mock update and context
-                mock_update = MagicMock(spec=Update)
-                mock_update.effective_chat.id = 12345
-                mock_update.effective_user.id = 67890
-                mock_update.effective_user.first_name = "TestUser"
-                mock_update.message.reply_text = AsyncMock()
+            # Mock update and context
+            mock_update = MagicMock(spec=Update)
+            mock_update.effective_chat.id = 12345
+            mock_update.effective_user.id = 67890
+            mock_update.effective_user.first_name = "TestUser"
+            mock_update.message.reply_text = AsyncMock()
 
-                mock_context = MagicMock(spec=CallbackContext)
+            mock_context = MagicMock(spec=CallbackContext)
 
-                # Mock methods
-                bot._ensure_ncrew_initialized = AsyncMock()
-                bot._is_target_chat = MagicMock(return_value=True)
+            # Mock methods
+            bot._ensure_ncrew_initialized = AsyncMock()
+            bot._is_target_chat = MagicMock(return_value=True)
 
-                # Execute the command
-                await bot.cmd_start(mock_update, mock_context)
+            # Execute the command
+            await bot.cmd_start(mock_update, mock_context)
 
-                # Verify results
-                bot._ensure_ncrew_initialized.assert_called_once()
-                mock_update.message.reply_text.assert_called_once()
+            # Verify results
+            bot._ensure_ncrew_initialized.assert_called_once()
+            mock_update.message.reply_text.assert_called_once()
 
-                # Check message content
-                call_args = mock_update.message.reply_text.call_args
-                message = call_args[0][0]
-                assert "Welcome to NeuroCrew Lab!" in message
+            # Check message content
+            call_args = mock_update.message.reply_text.call_args
+            message = call_args[0][0]
+            assert "Welcome to NeuroCrew Lab!" in message
 
 
 if __name__ == "__main__":
