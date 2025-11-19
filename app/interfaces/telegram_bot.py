@@ -75,26 +75,43 @@ class TelegramBot:
 
     async def run_startup_introductions(self):
         """Triggers the agent introduction sequence at startup."""
+        self.logger.info("DEBUG: Entered run_startup_introductions")
         await self._ensure_ncrew_initialized()
+        self.logger.info("DEBUG: Ncrew initialized")
 
         if Config.TARGET_CHAT_ID:
-            await self.application.bot.send_message(
-                chat_id=Config.TARGET_CHAT_ID,
-                text="🚀 **NeuroCrew Lab запускается...**\nСбор команды и инициализация агентов.",
-                parse_mode="Markdown",
+            self.logger.info(
+                f"DEBUG: Sending startup message to {Config.TARGET_CHAT_ID}"
             )
+            try:
+                await self.application.bot.send_message(
+                    chat_id=Config.TARGET_CHAT_ID,
+                    text="🚀 **NeuroCrew Lab запускается...**\nСбор команды и инициализация агентов.",
+                    parse_mode="Markdown",
+                )
+                self.logger.info("DEBUG: Startup message sent")
+            except Exception as e:
+                self.logger.error(f"DEBUG: Failed to send startup message: {e}")
 
         try:
+            self.logger.info("DEBUG: Starting streaming introductions loop")
             # Iterate over the async generator to stream introductions
             async for (
                 role_config,
                 intro_text,
             ) in self.ncrew.perform_startup_introductions():
+                self.logger.info(
+                    f"DEBUG: Got introduction from {role_config.role_name}"
+                )
+
                 # Send "typing" action while processing
                 if Config.TARGET_CHAT_ID:
-                    await self.application.bot.send_chat_action(
-                        chat_id=Config.TARGET_CHAT_ID, action="typing"
-                    )
+                    try:
+                        await self.application.bot.send_chat_action(
+                            chat_id=Config.TARGET_CHAT_ID, action="typing"
+                        )
+                    except Exception as e:
+                        self.logger.warning(f"DEBUG: Failed to send typing action: {e}")
 
                 # Escape introduction text
                 safe_intro = format_telegram_message(intro_text)
@@ -105,6 +122,7 @@ class TelegramBot:
                     formatted_intro, max_length=Config.TELEGRAM_MAX_MESSAGE_LENGTH
                 )
 
+                self.logger.info(f"DEBUG: Sending intro for {role_config.role_name}")
                 sent_via_actor = await self._send_role_messages_via_actor(
                     role_config, messages_to_send
                 )
@@ -120,12 +138,15 @@ class TelegramBot:
                             text=chunk,
                             parse_mode="MarkdownV2",
                         )
+                self.logger.info(f"DEBUG: Intro sent for {role_config.role_name}")
 
                 await asyncio.sleep(1.0)  # Short pause between agents
 
         except Exception as intro_error:
             self.logger.error(f"Failed during startup introductions: {intro_error}")
             return
+
+        self.logger.info("DEBUG: Introductions loop finished")
 
         if Config.TARGET_CHAT_ID:
             try:
