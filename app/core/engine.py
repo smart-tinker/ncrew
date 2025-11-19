@@ -1091,19 +1091,20 @@ class NeuroCrewLab:
         # Create connector with pure stateful interface
         return connector_class()
 
-    async def perform_startup_introductions(self) -> List[Tuple[RoleConfig, str]]:
+    async def perform_startup_introductions(
+        self,
+    ) -> AsyncGenerator[Tuple[RoleConfig, str], None]:
         """
         Performs a startup introduction sequence for all active roles.
         This creates a "prologue" in the conversation history by having each
         agent introduce itself. This history becomes the initial context for the first user query.
 
-        Returns:
-            List of tuples containing (RoleConfig, introduction_text) to be delivered to Telegram.
+        Yields:
+            Tuple[RoleConfig, str]: (role_config, introduction_text) for each role as it becomes available.
         """
         self.logger.info("=== STARTING AGENT INTRODUCTION SEQUENCE ===")
         introduction_prompt = "Hello! Please introduce yourself and briefly describe your role and capabilities."
         SYSTEM_CHAT_ID = 0  # A virtual chat_id for this system-level process
-        introductions_for_delivery: List[Tuple[RoleConfig, str]] = []
 
         # 1. Clear previous conversation and state for the target chat
         if Config.TARGET_CHAT_ID:
@@ -1153,7 +1154,8 @@ class NeuroCrewLab:
                 if Config.TARGET_CHAT_ID:
                     await self.storage.add_message(Config.TARGET_CHAT_ID, agent_message)
 
-                introductions_for_delivery.append((role, introduction_text))
+                # YIELD result immediately
+                yield (role, introduction_text)
 
                 # 5. Shut down the temporary session
                 if connector:
@@ -1166,7 +1168,6 @@ class NeuroCrewLab:
                 )
 
         self.logger.info("=== AGENT INTRODUCTION SEQUENCE COMPLETE ===")
-        return introductions_for_delivery
 
     async def shutdown_role_sessions(self):
         """Gracefully shutdown all role-based stateful sessions with reduced logging."""

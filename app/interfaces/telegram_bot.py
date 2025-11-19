@@ -77,49 +77,62 @@ class TelegramBot:
         """Triggers the agent introduction sequence at startup."""
         await self._ensure_ncrew_initialized()
 
+        if Config.TARGET_CHAT_ID:
+            await self.application.bot.send_message(
+                chat_id=Config.TARGET_CHAT_ID,
+                text="🚀 **NeuroCrew Lab запускается...**\nСбор команды и инициализация агентов.",
+                parse_mode="Markdown",
+            )
+
         try:
-            introductions = await self.ncrew.perform_startup_introductions()
-        except Exception as intro_error:
-            self.logger.error(f"Failed to gather startup introductions: {intro_error}")
-            return
-
-        if not introductions:
-            self.logger.warning("No introductions collected during startup sequence.")
-            return
-
-        for role_config, intro_text in introductions:
-            # Escape introduction text
-            safe_intro = format_telegram_message(intro_text)
-            formatted_intro = format_agent_response(
-                role_config.display_name, safe_intro
-            )
-            messages_to_send = split_long_message(
-                formatted_intro, max_length=Config.TELEGRAM_MAX_MESSAGE_LENGTH
-            )
-
-            sent_via_actor = await self._send_role_messages_via_actor(
-                role_config, messages_to_send
-            )
-            if not sent_via_actor:
-                self.logger.warning(
-                    "Failed to send introduction via actor bot for role %s. Falling back to coordinator bot.",
-                    role_config.role_name,
-                )
-                for chunk in messages_to_send:
-                    # chunk is already formatted and escaped
-                    await self.application.bot.send_message(
-                        chat_id=Config.TARGET_CHAT_ID,
-                        text=chunk,
-                        parse_mode="MarkdownV2",
+            # Iterate over the async generator to stream introductions
+            async for (
+                role_config,
+                intro_text,
+            ) in self.ncrew.perform_startup_introductions():
+                # Send "typing" action while processing
+                if Config.TARGET_CHAT_ID:
+                    await self.application.bot.send_chat_action(
+                        chat_id=Config.TARGET_CHAT_ID, action="typing"
                     )
 
-            await asyncio.sleep(1.5)
+                # Escape introduction text
+                safe_intro = format_telegram_message(intro_text)
+                formatted_intro = format_agent_response(
+                    role_config.display_name, safe_intro
+                )
+                messages_to_send = split_long_message(
+                    formatted_intro, max_length=Config.TELEGRAM_MAX_MESSAGE_LENGTH
+                )
+
+                sent_via_actor = await self._send_role_messages_via_actor(
+                    role_config, messages_to_send
+                )
+                if not sent_via_actor:
+                    self.logger.warning(
+                        "Failed to send introduction via actor bot for role %s. Falling back to coordinator bot.",
+                        role_config.role_name,
+                    )
+                    for chunk in messages_to_send:
+                        # chunk is already formatted and escaped
+                        await self.application.bot.send_message(
+                            chat_id=Config.TARGET_CHAT_ID,
+                            text=chunk,
+                            parse_mode="MarkdownV2",
+                        )
+
+                await asyncio.sleep(1.0)  # Short pause between agents
+
+        except Exception as intro_error:
+            self.logger.error(f"Failed during startup introductions: {intro_error}")
+            return
 
         if Config.TARGET_CHAT_ID:
             try:
                 await self.application.bot.send_message(
                     chat_id=Config.TARGET_CHAT_ID,
-                    text="💬 Команда готова к работе. Жду ваших указаний.",
+                    text="💬 **Команда в сборе и готова к работе.** Жду ваших указаний.",
+                    parse_mode="Markdown",
                 )
                 self.logger.info(
                     f"Sent 'ready' message to chat ID {Config.TARGET_CHAT_ID}."

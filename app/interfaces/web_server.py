@@ -90,6 +90,9 @@ def requires_auth(f):
     return decorated
 
 
+import threading
+
+
 # --- Role Management ---
 def get_roles():
     with open("roles/agents.yaml", "r") as f:
@@ -193,9 +196,15 @@ def save():
 
     save_roles(roles)
 
-    # Create reload flag
-    with open(".reload", "w") as f:
-        f.write("reload")
+    # Trigger reload with a slight delay to allow the response to be sent
+    def create_reload_flag():
+        import time
+
+        time.sleep(1.0)
+        with open(".reload", "w") as f:
+            f.write("reload")
+
+    threading.Thread(target=create_reload_flag, daemon=True).start()
 
     return redirect(url_for("index"))
 
@@ -248,7 +257,25 @@ def save_prompt():
 
 
 def run_web_server():
-    app.run(host="0.0.0.0", port=8080)
+    import time
+    import logging
+
+    retries = 5
+    port = 8080
+
+    while retries > 0:
+        try:
+            app.run(host="0.0.0.0", port=port, use_reloader=False)
+            break
+        except OSError as e:
+            if "Address already in use" in str(e) and retries > 0:
+                logging.warning(
+                    f"Port {port} is busy, retrying in 1 second... ({retries} retries left)"
+                )
+                time.sleep(1.0)
+                retries -= 1
+            else:
+                raise
 
 
 if __name__ == "__main__":
