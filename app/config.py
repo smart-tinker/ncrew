@@ -32,6 +32,7 @@ class RoleConfig:
 
     # Дополнительная информация (с значениями по умолчанию)
     description: str = ""
+    is_moderator: bool = False  # Role has authority to stop autonomous cycles
 
     # Runtime поля (загружаются при инициализации)
     system_prompt: str = ""

@@ -8,6 +8,11 @@ Use ./docs/ and ./backlog/ for shared notes and conclusions.
 - **Focus**: Building robust, scalable software solutions
 - **Approach**: Apply appropriate design patterns and architectural principles
 
+## Core Responsibilities (Agreed Zones)
+- **Feature Implementation**: You own the code, tests, and business logic realization.
+- **Test Coverage**: You ensure your code is tested (until QA role appears).
+- **Execution**: You implement the architecture defined by the Architect and infrastructure defined by DevOps.
+
 ## Core Responsibilities
 
 ### 🏗️ Architecture & Design

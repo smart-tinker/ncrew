@@ -55,6 +55,7 @@ class NeuroCrewLab:
         self.role_introductions: Dict[str, str] = {}  # {role_name: introduction_text}
 
         self._shutdown_in_progress: bool = False
+        self.request_timeout: float = 300.0  # Default 5 minutes per role execution
 
         # Role-based mode is REQUIRED
         if not self.is_role_based:
@@ -389,7 +390,17 @@ class NeuroCrewLab:
                 self.roles
             )
 
-            # Check for termination condition: exactly 5 dots
+            # Check for termination condition
+            # 1. Moderator (e.g. Scrum Master) can stop the cycle immediately
+            if raw_response.strip() == "....." and getattr(
+                role_config, "is_moderator", False
+            ):
+                self.logger.info(
+                    f"Moderator role {role_config.role_name} ended the dialogue. Cycle stopped immediately."
+                )
+                break
+
+            # 2. Standard termination: exactly 5 dots from everyone consecutively
             if raw_response.strip() == ".....":
                 consecutive_empty_responses += 1
                 consecutive_error_responses = 0
@@ -541,8 +552,27 @@ class NeuroCrewLab:
 
                 for attempt in range(max_retries):
                     try:
-                        response = await role_connector.execute(role_prompt)
+                        # Use asyncio.wait_for to prevent hanging
+                        response = await asyncio.wait_for(
+                            role_connector.execute(role_prompt),
+                            timeout=self.request_timeout
+                            if hasattr(self, "request_timeout")
+                            else 300.0,
+                        )
                         break  # Success, exit retry loop
+                    except asyncio.TimeoutError:
+                        self.logger.warning(
+                            f"Role {role.role_name} execution attempt {attempt + 1} timed out"
+                        )
+                        if attempt < max_retries - 1:
+                            # Wait before retry with exponential backoff
+                            await asyncio.sleep(2**attempt)
+                            continue
+                        else:
+                            # All retries failed
+                            raise RuntimeError(
+                                f"Role {role.role_name} execution timed out after {max_retries} attempts"
+                            )
                     except Exception as e:
                         self.logger.warning(
                             f"Role {role.role_name} execution attempt {attempt + 1} failed: {e}"
@@ -644,7 +674,10 @@ class NeuroCrewLab:
 
         if response_count > 0 and response_count % Config.SYSTEM_REMINDER_INTERVAL == 0:
             # Add system reminder
-            system_reminder = f"\n\n--- SYSTEM REMINDER ---\n{role.system_prompt}\n--- END REMINDER ---\n\n"
+            # Use [SYSTEM REMINDER] instead of --- to avoid CLI flag parsing issues
+            system_reminder = (
+                f"\n\n[SYSTEM REMINDER]\n{role.system_prompt}\n[END REMINDER]\n\n"
+            )
             conversation_context = system_reminder + conversation_context
 
         prompt = conversation_context
@@ -1220,7 +1253,9 @@ class NeuroCrewLab:
 
                 # Small delay between shutdowns to prevent overwhelming the system
                 if i < len(sessions_to_shutdown):
-                    await asyncio.sleep(0.05)  # Reduced from 0.1
+                    await asyncio.sleep(
+                        0.01
+                    )  # Further reduced to prevent event loop blocking
 
         except Exception as e:
             self.logger.error(f"Critical error during role sessions shutdown: {e}")

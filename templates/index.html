@@ -156,7 +156,17 @@
                     <div class="role-body">
                         <input type="hidden" name="role_name" value="{{ role.role_name }}">
                         <input type="hidden" name="telegram_bot_name" value="{{ role.telegram_bot_name }}">
+                        <input type="hidden" name="is_moderator" value="{{ 'true' if role.get('is_moderator') else 'false' }}">
                         <div class="form-grid">
+                            <div class="form-group full-width">
+                                <label style="font-weight: normal; cursor: pointer; display: flex; align-items: center;">
+                                    <input type="checkbox" 
+                                           style="width: auto; margin-right: 10px;"
+                                           onchange="this.closest('.role-body').querySelector('input[name=is_moderator]').value = this.checked"
+                                           {% if role.get('is_moderator') %}checked{% endif %}>
+                                    <strong>Модератор</strong> &nbsp;<span class="text-muted">(имеет право останавливать автономный диалог)</span>
+                                </label>
+                            </div>
                             <div class="form-group">
                                 <label>Отображаемое имя</label>
                                 <input type="text" name="display_name" value="{{ role.display_name }}">
@@ -532,7 +542,16 @@
                     <div class="role-body">
                         <input type="hidden" name="role_name" value="${roleName}">
                         <input type="hidden" name="telegram_bot_name" value="${botName}">
+                        <input type="hidden" name="is_moderator" value="false">
                         <div class="form-grid">
+                            <div class="form-group full-width">
+                                <label style="font-weight: normal; cursor: pointer; display: flex; align-items: center;">
+                                    <input type="checkbox" 
+                                           style="width: auto; margin-right: 10px;"
+                                           onchange="this.closest('.role-body').querySelector('input[name=is_moderator]').value = this.checked">
+                                    <strong>Модератор</strong> &nbsp;<span class="text-muted">(имеет право останавливать автономный диалог)</span>
+                                </label>
+                            </div>
                             <div class="form-group">
                                 <label>Отображаемое имя</label>
                                 <input type="text" name="display_name" value="">

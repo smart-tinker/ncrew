@@ -14,6 +14,7 @@ ROLE_YAML_FIELDS = [
     "agent_type",
     "cli_command",
     "description",
+    "is_moderator",
 ]
 
 load_dotenv()
@@ -159,6 +160,18 @@ def save():
     descriptions = request.form.getlist("description")
     bot_tokens = request.form.getlist("telegram_bot_token")
 
+    # Checkboxes don't send value if unchecked, so we need a different strategy
+    # But here we iterate by index.
+    # WORKAROUND: We will check specific form keys like is_moderator_{index}
+    # Or we can rely on hidden inputs. Let's look at how index.html will send it.
+    # Standard way for list of objects in Flask form:
+    # It's hard with getlist if checkboxes are sparse.
+    # Better approach: get all keys and parse indices?
+    # Or add hidden input with "false" before checkbox?
+    # Yes, hidden input trick is standard.
+
+    is_moderators = request.form.getlist("is_moderator")
+
     # Validate data integrity
     if not (
         len(role_names)
@@ -191,6 +204,9 @@ def save():
             "cli_command": cli_commands[i] if i < len(cli_commands) else "",
             "description": descriptions[i] if i < len(descriptions) else "",
             "telegram_bot_token": bot_tokens[i] if i < len(bot_tokens) else "",
+            "is_moderator": is_moderators[i] == "true"
+            if i < len(is_moderators)
+            else False,
         }
         roles.append(role)
 
