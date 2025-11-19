@@ -553,7 +553,7 @@ class SystemValidator:
                 # Validate proxy URL format
                 invalid_proxies = []
                 for var, url in proxy_config.items():
-                    # Accept socks:// as we now sanitize it in app/config.py
+                    # Accept socks:// as we now sanitize it in main.py
                     if not url.startswith(
                         ("http://", "https://", "socks4://", "socks5://", "socks://")
                     ):

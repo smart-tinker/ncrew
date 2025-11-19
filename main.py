@@ -10,9 +10,24 @@ import asyncio
 import logging
 import signal
 import sys
+import os
 from typing import Optional
 from urllib.request import urlopen
 from urllib.error import URLError
+
+# Sanitize proxy environment variables immediately
+# httpx requires 'socks5://' but some environments provide 'socks://'
+for var in [
+    "HTTP_PROXY",
+    "HTTPS_PROXY",
+    "ALL_PROXY",
+    "http_proxy",
+    "https_proxy",
+    "all_proxy",
+]:
+    value = os.environ.get(var)
+    if value and value.startswith("socks://"):
+        os.environ[var] = "socks5://" + value[8:]
 
 from app.config import Config
 from app.utils.logger import setup_logger
