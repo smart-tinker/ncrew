@@ -451,6 +451,43 @@ class SystemValidator:
 
         return result
 
+    def validate_socks_support(self) -> ValidationResult:
+        """Validate SOCKS proxy support in httpx."""
+        result = ValidationResult(
+            name="SOCKS Proxy Support Check",
+            status="PASS",
+            message="SOCKS proxy support validated",
+        )
+
+        try:
+            # Try to import socksio (required by httpx for socks support)
+            import importlib.util
+
+            if importlib.util.find_spec("socksio") is None:
+                # Double check by trying to initialize httpx with socks proxy
+                try:
+                    import httpx
+
+                    # This is just a test initialization, doesn't connect
+                    with httpx.Client(proxy="socks5://127.0.0.1:1080"):
+                        pass
+                except Exception as e:
+                    if "Unknown scheme" in str(e) or "Scheme not supported" in str(e):
+                        result.status = "FAIL"
+                        result.message = (
+                            "Missing SOCKS support. 'socksio' library is required."
+                        )
+                        result.fix_command = "pip install 'httpx[socks]'"
+                        return result
+
+            result.message = "SOCKS support (socksio) is available"
+
+        except Exception as e:
+            result.status = "WARN"
+            result.message = f"Could not verify SOCKS support: {e}"
+
+        return result
+
     def validate_network_connectivity(self) -> ValidationResult:
         """Validate network connectivity for Telegram API."""
         result = ValidationResult(
@@ -516,8 +553,9 @@ class SystemValidator:
                 # Validate proxy URL format
                 invalid_proxies = []
                 for var, url in proxy_config.items():
+                    # Accept socks:// as we now sanitize it in app/config.py
                     if not url.startswith(
-                        ("http://", "https://", "socks4://", "socks5://")
+                        ("http://", "https://", "socks4://", "socks5://", "socks://")
                     ):
                         invalid_proxies.append(f"{var}: {url}")
 
