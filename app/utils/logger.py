@@ -5,6 +5,7 @@ This module provides centralized logging configuration and utilities
 with security enhancements to prevent sensitive data exposure.
 """
 
+from logging.handlers import RotatingFileHandler
 import logging
 import sys
 from pathlib import Path
@@ -14,10 +15,10 @@ from .security import sanitize_for_logging
 
 def setup_logger(
     name: str,
-    level: str = 'INFO',
+    level: str = "INFO",
     log_file: Optional[Path] = None,
     format_string: Optional[str] = None,
-    use_security_formatter: bool = True
+    use_security_formatter: bool = True,
 ) -> logging.Logger:
     """
     Set up a logger with console and optional file output.
@@ -42,7 +43,7 @@ def setup_logger(
 
     # Default format
     if format_string is None:
-        format_string = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        format_string = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 
     # Use security formatter if enabled
     if use_security_formatter:
@@ -59,7 +60,13 @@ def setup_logger(
     # File handler (if specified)
     if log_file:
         log_file.parent.mkdir(parents=True, exist_ok=True)
-        file_handler = logging.FileHandler(log_file, encoding='utf-8')
+        # Use RotatingFileHandler: 10MB max size, 5 backup files
+        file_handler = RotatingFileHandler(
+            log_file,
+            maxBytes=10 * 1024 * 1024,  # 10MB
+            backupCount=5,
+            encoding="utf-8",
+        )
         file_handler.setLevel(logging.DEBUG)  # More verbose for files
         file_handler.setFormatter(formatter)
         logger.addHandler(file_handler)
@@ -77,7 +84,7 @@ def get_logger(name: str) -> logging.Logger:
     Returns:
         logging.Logger: Logger instance
     """
-    root_logger = logging.getLogger('ncrew')
+    root_logger = logging.getLogger("ncrew")
     return root_logger.getChild(name)
 
 
@@ -91,11 +98,11 @@ class SecurityFormatter(logging.Formatter):
 
     def format(self, record):
         # Sanitize the message to prevent sensitive data exposure
-        if hasattr(record, 'msg') and isinstance(record.msg, str):
+        if hasattr(record, "msg") and isinstance(record.msg, str):
             record.msg = sanitize_for_logging(record.msg)
 
         # Sanitize any additional arguments
-        if hasattr(record, 'args') and record.args:
+        if hasattr(record, "args") and record.args:
             sanitized_args = tuple(
                 sanitize_for_logging(str(arg)) if isinstance(arg, str) else arg
                 for arg in record.args
@@ -119,12 +126,12 @@ def log_function_call(logger: logging.Logger, func_name: str, **kwargs) -> None:
     for k, v in kwargs.items():
         if isinstance(v, str):
             sanitized_params[k] = sanitize_for_logging(v)
-        elif hasattr(v, '__str__'):
+        elif hasattr(v, "__str__"):
             sanitized_params[k] = sanitize_for_logging(str(v))
         else:
             sanitized_params[k] = v
 
-    params_str = ', '.join(f"{k}={v}" for k, v in sanitized_params.items())
+    params_str = ", ".join(f"{k}={v}" for k, v in sanitized_params.items())
     logger.debug(f"Calling {func_name}({params_str})")
 
 
@@ -141,7 +148,7 @@ def log_error(logger: logging.Logger, error: Exception, context: str = "") -> No
     logger.error(f"Error{context_str}: {type(error).__name__}: {error}")
 
 
-def log_info(logger: logging.Logger, message: str, level: str = 'INFO') -> None:
+def log_info(logger: logging.Logger, message: str, level: str = "INFO") -> None:
     """
     Log an informational message.
 
@@ -155,4 +162,4 @@ def log_info(logger: logging.Logger, message: str, level: str = 'INFO') -> None:
 
 
 # Default logger configuration
-default_logger = setup_logger('ncrew')
+default_logger = setup_logger("ncrew")

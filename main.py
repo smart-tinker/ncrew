@@ -32,7 +32,11 @@ from app.config import Config
 from app.utils.logger import setup_logger
 
 # Initialize logger
-logger = setup_logger("main", Config.LOG_LEVEL)
+logger = setup_logger(
+    "main",
+    Config.LOG_LEVEL,
+    log_file=Config.DATA_DIR / "logs" / "ncrew.log",
+)
 
 
 def main():

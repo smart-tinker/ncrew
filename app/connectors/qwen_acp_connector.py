@@ -51,7 +51,9 @@ class QwenACPConnector(BaseConnector):
         self._conversation_history: List[str] = []
         self.current_session: Optional[_SessionInfo] = None
         # Respect global timeout but never allow less than 5 seconds
-        self.request_timeout: float = max(5.0, float(getattr(Config, "AGENT_TIMEOUT", 120)))
+        self.request_timeout: float = max(
+            5.0, float(getattr(Config, "AGENT_TIMEOUT", 120))
+        )
 
     async def launch(self, command: str, system_prompt: str):
         """Launch Qwen CLI and initialize ACP session."""
@@ -87,7 +89,9 @@ class QwenACPConnector(BaseConnector):
 
     async def execute(self, delta_prompt: str) -> str:
         if not self.is_alive() or not self.session_id:
-            raise RuntimeError("Qwen ACP session is not active. Launch the connector first.")
+            raise RuntimeError(
+                "Qwen ACP session is not active. Launch the connector first."
+            )
 
         response_text = await self._send_prompt(delta_prompt)
         if response_text:
@@ -100,7 +104,9 @@ class QwenACPConnector(BaseConnector):
     async def shutdown(self):
         if self.is_alive() and self.session_id:
             try:
-                await self._send_notification("session/cancel", {"sessionId": self.session_id})
+                await self._send_notification(
+                    "session/cancel", {"sessionId": self.session_id}
+                )
             except Exception:
                 pass
         await super().shutdown()
@@ -165,7 +171,9 @@ class QwenACPConnector(BaseConnector):
             raise RuntimeError("Qwen ACP did not return a sessionId.")
         self.session_id = session_id
         if self.process:
-            self.current_session = _SessionInfo(pid=self.process.pid, session_id=session_id)
+            self.current_session = _SessionInfo(
+                pid=self.process.pid, session_id=session_id
+            )
 
     async def _send_prompt(self, prompt: str) -> str:
         result, aggregated_text = await self._send_request(
@@ -220,7 +228,9 @@ class QwenACPConnector(BaseConnector):
                 )
                 raise RuntimeError(f"Qwen ACP timeout while waiting for {method}")
             try:
-                message = await asyncio.wait_for(self._read_message(), timeout=remaining)
+                message = await asyncio.wait_for(
+                    self._read_message(), timeout=remaining
+                )
                 deadline = loop.time() + self.request_timeout
             except asyncio.TimeoutError:
                 self.logger.error(
@@ -229,7 +239,9 @@ class QwenACPConnector(BaseConnector):
                     request_id,
                     self.request_timeout,
                 )
-                raise RuntimeError(f"Qwen ACP timeout while waiting for {method}") from None
+                raise RuntimeError(
+                    f"Qwen ACP timeout while waiting for {method}"
+                ) from None
             except (BrokenPipeError, ConnectionResetError) as e:
                 self.logger.error("Connection broken during ACP communication: %s", e)
                 raise RuntimeError(f"Qwen ACP connection error: {e}") from e
@@ -237,7 +249,11 @@ class QwenACPConnector(BaseConnector):
             if message is None:
                 raise RuntimeError("Qwen ACP process terminated unexpectedly.")
 
-            if "method" in message and "id" in message and message.get("id") != request_id:
+            if (
+                "method" in message
+                and "id" in message
+                and message.get("id") != request_id
+            ):
                 await self._handle_agent_request(message)
                 continue
 
@@ -309,7 +325,9 @@ class QwenACPConnector(BaseConnector):
 
         return {"outcome": {"outcome": "selected", "optionId": option_id}}
 
-    def _handle_notification(self, message: JsonDict, collected_chunks: Optional[List[str]]):
+    def _handle_notification(
+        self, message: JsonDict, collected_chunks: Optional[List[str]]
+    ):
         method = message.get("method")
         params = message.get("params", {})
 
@@ -389,21 +407,18 @@ class QwenACPConnector(BaseConnector):
         if isinstance(content, dict):
             return content.get("text") or ""
         if isinstance(content, list):
-            fragments = [chunk.get("text") for chunk in content if isinstance(chunk, dict) and chunk.get("text")]
+            fragments = [
+                chunk.get("text")
+                for chunk in content
+                if isinstance(chunk, dict) and chunk.get("text")
+            ]
             return "".join(fragments)
         return ""
 
     def _get_clean_env(self) -> Dict[str, str]:
-        env = os.environ.copy()
-        for var in [
-            "HTTP_PROXY",
-            "HTTPS_PROXY",
-            "ALL_PROXY",
-            "NO_PROXY",
-            "http_proxy",
-            "https_proxy",
-            "all_proxy",
-            "no_proxy",
-        ]:
-            env.pop(var, None)
-        return env
+        """
+        Get environment for the process.
+
+        Simply inherit the full environment including proxy settings.
+        """
+        return os.environ.copy()
