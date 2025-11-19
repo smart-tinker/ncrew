@@ -41,6 +41,24 @@ def _sanitize_bot_name(role_name: str) -> str:
     return candidate
 
 
+# Custom YAML presenter to enforce quotes for strings with special chars or spaces
+def str_presenter(dumper, data):
+    if len(data.splitlines()) > 1:  # multiline
+        return dumper.represent_scalar("tag:yaml.org,2002:str", data, style="|")
+    # Force quotes if string contains spaces or special yaml chars
+    if (
+        any(c in data for c in ":{}[],&*#?|-<>=!%@`")
+        or " " in data
+        or data.isdigit()
+        or data.lower() in ("yes", "no", "on", "off", "true", "false", "null")
+    ):
+        return dumper.represent_scalar("tag:yaml.org,2002:str", data, style='"')
+    return dumper.represent_scalar("tag:yaml.org,2002:str", data)
+
+
+yaml.SafeDumper.add_representer(str, str_presenter)
+
+
 # --- Auth ---
 def check_auth(username, password):
     """This function is called to check if a username /
@@ -137,6 +155,19 @@ def save():
     cli_commands = request.form.getlist("cli_command")
     descriptions = request.form.getlist("description")
     bot_tokens = request.form.getlist("telegram_bot_token")
+
+    # Validate data integrity
+    if not (
+        len(role_names)
+        == len(display_names)
+        == len(agent_types)
+        == len(cli_commands)
+        == len(descriptions)
+    ):
+        return (
+            "Error: Form data mismatch (list lengths differ). Please refresh and try again.",
+            400,
+        )
 
     total_roles = len(role_names)
 

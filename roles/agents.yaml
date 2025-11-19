@@ -39,8 +39,8 @@ roles:
   display_name: Security Analyst
   telegram_bot_name: Security_Analyst_Bot
   system_prompt_file: roles/prompts/security_analyst.md
-  agent_type: qwen_acp
-  cli_command: qwen --experimental-acp
+  agent_type: gemini_acp
+  cli_command: "gemini --experimental-acp --approval-mode default"
   description: Security Analyst, обеспечивает безопасность и защиту
 - role_name: devops_senior
   display_name: DevOps Senior
