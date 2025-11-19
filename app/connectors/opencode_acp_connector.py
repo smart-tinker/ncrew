@@ -74,6 +74,11 @@ class OpenCodeACPConnector(BaseConnector):
             limit=self.STREAM_READER_LIMIT,
         )
 
+        # Verify process started successfully
+        await asyncio.sleep(0.1)  # Small delay to let process start
+        if not self.is_alive():
+            raise RuntimeError(f"OpenCode ACP process failed to start: {args}")
+
         self.message_id = 0
         self.session_id = None
         self.initialized = False
@@ -82,11 +87,16 @@ class OpenCodeACPConnector(BaseConnector):
         self.available_auth_methods = []
         self._conversation_history = []
 
-        await self._initialize()
-        await self._create_session()
+        try:
+            await self._initialize()
+            await self._create_session()
 
-        if system_prompt.strip():
-            await self._send_prompt(system_prompt)
+            if system_prompt.strip():
+                await self._send_prompt(system_prompt)
+        except Exception as e:
+            self.logger.error(f"Failed to initialize OpenCode ACP session: {e}")
+            await self.shutdown()
+            raise
 
     async def execute(self, delta_prompt: str) -> str:
         if not self.is_alive() or not self.session_id:
@@ -154,7 +164,7 @@ class OpenCodeACPConnector(BaseConnector):
         self.initialized = True
         self.agent_capabilities = response.get("agentCapabilities", {})
         self.available_auth_methods = [
-            method.get("id")
+            str(method.get("id"))
             for method in response.get("authMethods", [])
             if isinstance(method, dict) and method.get("id")
         ]
@@ -373,26 +383,34 @@ class OpenCodeACPConnector(BaseConnector):
         if not self.process or not self.process.stdout:
             raise RuntimeError("OpenCode ACP process stdout is not available.")
 
-        while True:
-            raw = await self.process.stdout.readline()
-            if not raw:
-                return None
+        # Add read timeout to prevent hanging
+        try:
+            raw = await asyncio.wait_for(self.process.stdout.readline(), timeout=10.0)
+        except asyncio.TimeoutError:
+            self.logger.error("Timeout reading from OpenCode ACP process stdout")
+            raise RuntimeError("OpenCode ACP process read timeout")
 
-            text = raw.decode("utf-8").strip()
-            if not text:
-                continue
+        if not raw:
+            return None
 
-            try:
-                message = json.loads(text)
-                self.logger.debug(
-                    "Received message: %s",
-                    message.get("method") or message.get("id"),
-                )
-                return message
-            except json.JSONDecodeError:
-                self.logger.warning(
-                    "Failed to decode JSON line from OpenCode: %s", text
-                )
+        text = raw.decode("utf-8").strip()
+        if not text:
+            # Skip empty lines but don't recurse infinitely
+            return await self._read_message()
+
+        try:
+            message = json.loads(text)
+            self.logger.debug(
+                "Received message: %s",
+                message.get("method") or message.get("id"),
+            )
+            return message
+        except json.JSONDecodeError as e:
+            self.logger.warning(
+                "Failed to decode JSON line from OpenCode: %s (error: %s)", text, str(e)
+            )
+            # Continue reading instead of failing completely
+            return await self._read_message()
 
     def _prepare_command_args(self, command: str) -> List[str]:
         args = shlex.split(command)
@@ -410,7 +428,7 @@ class OpenCodeACPConnector(BaseConnector):
             return content.get("text") or ""
         if isinstance(content, list):
             fragments = [
-                chunk.get("text")
+                str(chunk.get("text"))
                 for chunk in content
                 if isinstance(chunk, dict) and chunk.get("text")
             ]
