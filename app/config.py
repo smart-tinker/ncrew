@@ -380,37 +380,9 @@ class Config:
 
         return summary
 
-    @classmethod
-    def _sanitize_proxy_env(cls):
-        """
-        Sanitize proxy environment variables for httpx compatibility.
-
-        httpx requires 'socks5://' scheme, but some environments provide 'socks://'.
-        This method normalizes 'socks://' to 'socks5://' in os.environ.
-        """
-        proxy_vars = [
-            "HTTP_PROXY",
-            "HTTPS_PROXY",
-            "ALL_PROXY",
-            "http_proxy",
-            "https_proxy",
-            "all_proxy",
-        ]
-
-        for var in proxy_vars:
-            value = os.environ.get(var)
-            if value and value.startswith("socks://"):
-                # Replace only the scheme at the start
-                new_value = "socks5://" + value[8:]
-                os.environ[var] = new_value
-                # Log directly to stdout as logger might not be configured yet
-                print(
-                    f"Sanitized proxy env var {var}: socks:// -> socks5:// for httpx compatibility"
-                )
-
 
 # Инициализация загрузчиков при импорте
-Config._sanitize_proxy_env()  # Sanitize proxies before anything else
+# Config._sanitize_proxy_env() removed to respect user network configuration
 Config.load_roles()  # Сначала загружаем ролевую конфигурацию
 if Config.is_role_based_enabled():
     Config._load_telegram_bot_tokens()  # Затем загружаем токены на основе ролей

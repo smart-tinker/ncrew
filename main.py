@@ -14,19 +14,8 @@ import os
 from typing import Optional
 import httpx
 
-# Sanitize proxy environment variables immediately
-# httpx requires 'socks5://' but some environments provide 'socks://'
-for var in [
-    "HTTP_PROXY",
-    "HTTPS_PROXY",
-    "ALL_PROXY",
-    "http_proxy",
-    "https_proxy",
-    "all_proxy",
-]:
-    value = os.environ.get(var)
-    if value and value.startswith("socks://"):
-        os.environ[var] = "socks5://" + value[8:]
+# Sanitization removed to respect user network configuration
+# Users are responsible for providing correct proxy schemes (e.g. socks5://)
 
 from app.config import Config
 from app.utils.logger import setup_logger
