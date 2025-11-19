@@ -354,7 +354,7 @@ class ExternalDepsTester:
             return result
 
         try:
-            # Load bot token from config
+            # Load bot token from app.config
             env_file = self.project_root / '.env'
             if not env_file.exists():
                 result.status = 'SKIP'

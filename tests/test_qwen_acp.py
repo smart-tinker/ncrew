@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 import pytest_asyncio
 
-from connectors.qwen_acp_connector import QwenACPConnector
+from app.connectors.qwen_acp_connector import QwenACPConnector
 
 
 MOCK_SERVER_SOURCE = """
@@ -146,7 +146,7 @@ async def test_qwen_acp_connector_integration(mock_qwen_command):
 
 # Simple unit tests for config
 def test_load_roles():
-    from config import Config
+    from app.config import Config
     # Reset for test
     Config.roles_registry = None
     Config.role_based_enabled = False
@@ -159,7 +159,7 @@ def test_load_roles():
 
 
 def test_validate_config():
-    from config import Config
+    from app.config import Config
     errors = Config.validate_role_configuration()
     assert isinstance(errors, list)
     # Should have no errors if config is valid

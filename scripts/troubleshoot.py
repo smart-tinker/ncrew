@@ -703,7 +703,7 @@ class Troubleshooter:
         """Check Telegram bot token."""
         try:
             sys.path.insert(0, str(self.project_root))
-            from config import Config
+            from app.config import Config
 
             if not Config.TELEGRAM_BOT_TOKEN:
                 return DiagnosticResult(
@@ -748,7 +748,7 @@ class Troubleshooter:
         """Check CLI agent paths configuration."""
         try:
             sys.path.insert(0, str(self.project_root))
-            from config import Config
+            from app.config import Config
 
             agent_paths = Config.CLI_PATHS
             missing_agents = []
@@ -1058,7 +1058,7 @@ class Troubleshooter:
         """Check agent configuration consistency."""
         try:
             sys.path.insert(0, str(self.project_root))
-            from config import Config
+            from app.config import Config
 
             cli_paths = Config.CLI_PATHS
             configured_agents = list(cli_paths.keys())
@@ -1157,7 +1157,7 @@ class Troubleshooter:
         """Check Telegram bot initialization."""
         try:
             sys.path.insert(0, str(self.project_root))
-            from config import Config
+            from app.config import Config
 
             # Validate configuration first
             Config.validate()
@@ -1190,7 +1190,7 @@ class Troubleshooter:
         """Check storage system functionality."""
         try:
             sys.path.insert(0, str(self.project_root))
-            from storage.file_storage import FileStorage
+            from app.storage.file_storage import FileStorage
 
             # Create test storage instance
             test_data_dir = self.project_root / 'data' / 'test_storage'
@@ -1246,7 +1246,7 @@ class Troubleshooter:
         """Check logging system."""
         try:
             sys.path.insert(0, str(self.project_root))
-            from utils.logger import setup_logger
+            from app.utils.logger import setup_logger
 
             # Test logger creation
             test_logger = setup_logger('test_logger', 'INFO')

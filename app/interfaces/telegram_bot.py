@@ -18,10 +18,10 @@ from telegram.ext import (
 )
 from telegram.ext import CallbackQueryHandler
 
-from config import Config, RoleConfig
-from ncrew import NeuroCrewLab
-from utils.logger import setup_logger
-from utils.formatters import (
+from app.config import Config, RoleConfig
+from app.core.engine import NeuroCrewLab
+from app.utils.logger import setup_logger
+from app.utils.formatters import (
     format_welcome_message,
     format_help_message,
     format_status_message,
@@ -29,7 +29,7 @@ from utils.formatters import (
     split_long_message,
     format_telegram_message,
 )
-from utils.security import validate_input, sanitize_for_logging
+from app.utils.security import validate_input, sanitize_for_logging
 
 
 class TelegramBot:

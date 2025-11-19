@@ -12,7 +12,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from dataclasses import dataclass, field, fields
 
-from connectors import get_connector_spec
+from app.connectors import get_connector_spec
 
 # Load environment variables from .env file
 load_dotenv()

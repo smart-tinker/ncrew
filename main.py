@@ -14,8 +14,8 @@ from typing import Optional
 from urllib.request import urlopen
 from urllib.error import URLError
 
-from config import Config
-from utils.logger import setup_logger
+from app.config import Config
+from app.utils.logger import setup_logger
 
 # Initialize logger
 logger = setup_logger("main", Config.LOG_LEVEL)
@@ -48,14 +48,20 @@ def main():
         if Config.is_role_based_enabled():
             available_roles = Config.get_available_roles()
             logger.info(f"Total roles loaded: {len(available_roles)}")
-            logger.info(f"Available roles: {[role.role_name for role in available_roles]}")
+            logger.info(
+                f"Available roles: {[role.role_name for role in available_roles]}"
+            )
 
             # Log role details
             logger.info("Role configuration details:")
             for role in available_roles:
                 logger.info(f"  • {role.role_name} ({role.display_name})")
-                logger.info(f"    Agent: {role.agent_type} | Command: {role.cli_command}")
-                logger.info(f"    Bot: {role.telegram_bot_name} | Token: {'✓' if role.get_bot_token() else '⚠'}")
+                logger.info(
+                    f"    Agent: {role.agent_type} | Command: {role.cli_command}"
+                )
+                logger.info(
+                    f"    Bot: {role.telegram_bot_name} | Token: {'✓' if role.get_bot_token() else '⚠'}"
+                )
         else:
             logger.warning("Role-based configuration not enabled")
             return
@@ -70,12 +76,13 @@ def main():
 
 import os
 import threading
-from web_server import run_web_server
+from app.interfaces.web_server import run_web_server
+
 
 async def async_main():
     """Async main function that handles the complete application lifecycle."""
     # Import and create bot instance
-    from telegram_bot import TelegramBot
+    from app.interfaces.telegram_bot import TelegramBot
 
     # Start web server in a separate thread
     web_thread = threading.Thread(target=run_web_server, daemon=True)
@@ -105,7 +112,7 @@ async def async_main():
         logger.info("Initiating graceful shutdown...")
 
         try:
-            if hasattr(bot_instance, 'shutdown'):
+            if hasattr(bot_instance, "shutdown"):
                 # Add timeout to prevent hanging during shutdown
                 await asyncio.wait_for(bot_instance.shutdown(), timeout=15.0)
             logger.info("Graceful shutdown completed")
@@ -137,7 +144,9 @@ async def async_main():
             loop.stop()
             return
         logger.info("SIGINT received. Initiating shutdown...")
-        loop.call_soon_threadsafe(lambda: asyncio.create_task(ensure_shutdown("SIGINT")))
+        loop.call_soon_threadsafe(
+            lambda: asyncio.create_task(ensure_shutdown("SIGINT"))
+        )
 
     try:
         if hasattr(loop, "add_signal_handler"):
@@ -159,15 +168,15 @@ async def async_main():
         # Keep the bot running and check for reload flag
         try:
             while not shutdown_event.is_set():
-                if os.path.exists('.reload'):
+                if os.path.exists(".reload"):
                     logger.info("Reload flag detected. Restarting application...")
                     await bot_instance.application.bot.send_message(
                         chat_id=Config.TARGET_CHAT_ID,
-                        text="Configuration updated. Restarting and starting a new conversation..."
+                        text="Configuration updated. Restarting and starting a new conversation...",
                     )
                     await ensure_shutdown("configuration reload")
-                    os.remove('.reload')
-                    os.execv(sys.executable, ['python'] + sys.argv)
+                    os.remove(".reload")
+                    os.execv(sys.executable, ["python"] + sys.argv)
                 await asyncio.sleep(1)
         except asyncio.CancelledError:
             logger.info("Bot operation cancelled")
@@ -187,5 +196,5 @@ async def async_main():
             loop.remove_signal_handler(signal.SIGINT)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

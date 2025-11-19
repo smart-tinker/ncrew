@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from config import Config
+from app.config import Config
 from .base import BaseConnector
 
 JsonDict = Dict[str, Any]

@@ -1,8 +1,8 @@
 """
-OpenCode ACP connector implementing the Agent Communication Protocol.
+Gemini ACP connector implementing the experimental ACP JSON-RPC protocol.
 
-This connector talks directly to the `opencode acp` CLI and follows the
-standard ACP handshake sequence:
+This connector talks directly to the `gemini --experimental-acp` CLI and follows
+the same handshake sequence as other ACP-compatible CLIs:
 
     initialize → session/new → session/prompt
 
@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from config import Config
+from app.config import Config
 from .base import BaseConnector
 
 JsonDict = Dict[str, Any]
@@ -33,13 +33,12 @@ class _SessionInfo:
     session_id: str
 
 
-class OpenCodeACPConnector(BaseConnector):
-    """Connector that implements the OpenCode ACP protocol."""
+class GeminiACPConnector(BaseConnector):
+    """Connector that implements the Gemini ACP experimental protocol."""
 
-    DEFAULT_COMMAND = "opencode acp"
-    STREAM_READER_LIMIT = (
-        2 * 1024 * 1024
-    )  # 2MB per line to accommodate large JSON payloads
+    DEFAULT_COMMAND = "gemini --experimental-acp"
+    AUTH_METHOD_GEMINI = "gemini-api-key"
+    STREAM_READER_LIMIT = 2 * 1024 * 1024
 
     def __init__(self):
         super().__init__()
@@ -52,18 +51,16 @@ class OpenCodeACPConnector(BaseConnector):
         self._conversation_history: List[str] = []
         self.current_session: Optional[_SessionInfo] = None
         # Respect global timeout but never allow less than 5 seconds
-        self.request_timeout: float = max(
-            5.0, float(getattr(Config, "AGENT_TIMEOUT", 120))
-        )
+        self.request_timeout: float = max(5.0, float(getattr(Config, "AGENT_TIMEOUT", 120)))
 
     async def launch(self, command: str, system_prompt: str):
-        """Launch OpenCode CLI and initialize ACP session."""
+        """Launch Gemini CLI and initialize ACP session."""
         if self.is_alive():
             await self.shutdown()
 
         args = self._prepare_command_args(command or self.DEFAULT_COMMAND)
         env = self._get_clean_env()
-        self.logger.info("Starting OpenCode ACP process: %s", " ".join(args))
+        self.logger.info("Starting Gemini ACP process: %s", " ".join(args))
 
         self.process = await asyncio.create_subprocess_exec(
             *args,
@@ -90,9 +87,7 @@ class OpenCodeACPConnector(BaseConnector):
 
     async def execute(self, delta_prompt: str) -> str:
         if not self.is_alive() or not self.session_id:
-            raise RuntimeError(
-                "OpenCode ACP session is not active. Launch the connector first."
-            )
+            raise RuntimeError("Gemini ACP session is not active. Launch the connector first.")
 
         response_text = await self._send_prompt(delta_prompt)
         if response_text:
@@ -105,9 +100,7 @@ class OpenCodeACPConnector(BaseConnector):
     async def shutdown(self):
         if self.is_alive() and self.session_id:
             try:
-                await self._send_notification(
-                    "session/cancel", {"sessionId": self.session_id}
-                )
+                await self._send_notification("session/cancel", {"sessionId": self.session_id})
             except Exception:
                 pass
         await super().shutdown()
@@ -121,8 +114,8 @@ class OpenCodeACPConnector(BaseConnector):
 
     def get_info(self) -> Dict[str, Any]:
         return {
-            "name": "OpenCode ACP Connector",
-            "type": "opencode_acp",
+            "name": "Gemini ACP Connector (experimental)",
+            "type": "gemini_acp",
             "status": "active" if self.is_alive() else "inactive",
             "session_id": self.session_id,
         }
@@ -132,7 +125,7 @@ class OpenCodeACPConnector(BaseConnector):
 
         try:
             result = subprocess.run(
-                ["opencode", "--version"],
+                ["gemini", "--version"],
                 capture_output=True,
                 text=True,
                 timeout=10,
@@ -169,12 +162,10 @@ class OpenCodeACPConnector(BaseConnector):
         )
         session_id = result.get("sessionId")
         if not session_id:
-            raise RuntimeError("OpenCode ACP did not return a sessionId.")
+            raise RuntimeError("Gemini ACP did not return a sessionId.")
         self.session_id = session_id
         if self.process:
-            self.current_session = _SessionInfo(
-                pid=self.process.pid, session_id=session_id
-            )
+            self.current_session = _SessionInfo(pid=self.process.pid, session_id=session_id)
 
     async def _send_prompt(self, prompt: str) -> str:
         result, aggregated_text = await self._send_request(
@@ -204,7 +195,7 @@ class OpenCodeACPConnector(BaseConnector):
         collect_output: bool = False,
     ) -> Tuple[JsonDict, str]:
         if not self.process or not self.process.stdin or not self.process.stdout:
-            raise RuntimeError("OpenCode ACP process is not available.")
+            raise RuntimeError("Gemini ACP process is not available.")
 
         request_id = self._next_message_id()
         message = {
@@ -227,11 +218,9 @@ class OpenCodeACPConnector(BaseConnector):
                 self.logger.error(
                     "Timed out waiting for response (%s, id=%s)", method, request_id
                 )
-                raise RuntimeError(f"OpenCode ACP timeout while waiting for {method}")
+                raise RuntimeError(f"Gemini ACP timeout while waiting for {method}")
             try:
-                message = await asyncio.wait_for(
-                    self._read_message(), timeout=remaining
-                )
+                message = await asyncio.wait_for(self._read_message(), timeout=remaining)
                 deadline = loop.time() + self.request_timeout
             except asyncio.TimeoutError:
                 self.logger.error(
@@ -240,21 +229,15 @@ class OpenCodeACPConnector(BaseConnector):
                     request_id,
                     self.request_timeout,
                 )
-                raise RuntimeError(
-                    f"OpenCode ACP timeout while waiting for {method}"
-                ) from None
+                raise RuntimeError(f"Gemini ACP timeout while waiting for {method}") from None
             except (BrokenPipeError, ConnectionResetError) as e:
                 self.logger.error("Connection broken during ACP communication: %s", e)
-                raise RuntimeError(f"OpenCode ACP connection error: {e}") from e
+                raise RuntimeError(f"Gemini ACP connection error: {e}") from e
 
             if message is None:
-                raise RuntimeError("OpenCode ACP process terminated unexpectedly.")
+                raise RuntimeError("Gemini ACP process terminated unexpectedly.")
 
-            if (
-                "method" in message
-                and "id" in message
-                and message.get("id") != request_id
-            ):
+            if "method" in message and "id" in message and message.get("id") != request_id:
                 await self._handle_agent_request(message)
                 continue
 
@@ -267,14 +250,12 @@ class OpenCodeACPConnector(BaseConnector):
                         else str(error)
                     )
                     self.logger.error(
-                        "OpenCode ACP returned error for %s (id=%s): %s",
+                        "Gemini ACP returned error for %s (id=%s): %s",
                         method,
                         request_id,
                         error,
                     )
-                    raise RuntimeError(
-                        f"OpenCode ACP error ({method}): {error_message}"
-                    )
+                    raise RuntimeError(f"Gemini ACP error ({method}): {error_message}")
 
                 result = message.get("result", {})
                 aggregated_text = "".join(collected_chunks or [])
@@ -328,9 +309,7 @@ class OpenCodeACPConnector(BaseConnector):
 
         return {"outcome": {"outcome": "selected", "optionId": option_id}}
 
-    def _handle_notification(
-        self, message: JsonDict, collected_chunks: Optional[List[str]]
-    ):
+    def _handle_notification(self, message: JsonDict, collected_chunks: Optional[List[str]]):
         method = message.get("method")
         params = message.get("params", {})
 
@@ -359,7 +338,7 @@ class OpenCodeACPConnector(BaseConnector):
 
     async def _write_message(self, message: JsonDict, expect_response: bool = True):
         if not self.process or not self.process.stdin:
-            raise RuntimeError("OpenCode ACP process stdin is not available.")
+            raise RuntimeError("Qwen ACP process stdin is not available.")
         await self._write_raw(json.dumps(message) + "\n")
         if expect_response:
             self.logger.debug("Message written: %s", message.get("method"))
@@ -371,7 +350,7 @@ class OpenCodeACPConnector(BaseConnector):
 
     async def _read_message(self) -> Optional[JsonDict]:
         if not self.process or not self.process.stdout:
-            raise RuntimeError("OpenCode ACP process stdout is not available.")
+            raise RuntimeError("Qwen ACP process stdout is not available.")
 
         while True:
             raw = await self.process.stdout.readline()
@@ -390,14 +369,15 @@ class OpenCodeACPConnector(BaseConnector):
                 )
                 return message
             except json.JSONDecodeError:
-                self.logger.warning(
-                    "Failed to decode JSON line from OpenCode: %s", text
-                )
+                self.logger.warning("Failed to decode JSON line from Qwen: %s", text)
 
     def _prepare_command_args(self, command: str) -> List[str]:
         args = shlex.split(command)
         if not args:
             args = shlex.split(self.DEFAULT_COMMAND)
+
+        if "--experimental-acp" not in args:
+            args.append("--experimental-acp")
         return args
 
     def _next_message_id(self) -> int:
@@ -409,18 +389,21 @@ class OpenCodeACPConnector(BaseConnector):
         if isinstance(content, dict):
             return content.get("text") or ""
         if isinstance(content, list):
-            fragments = [
-                chunk.get("text")
-                for chunk in content
-                if isinstance(chunk, dict) and chunk.get("text")
-            ]
+            fragments = [chunk.get("text") for chunk in content if isinstance(chunk, dict) and chunk.get("text")]
             return "".join(fragments)
         return ""
 
     def _get_clean_env(self) -> Dict[str, str]:
-        """
-        Get environment for the process.
-
-        Simply inherit the full environment including proxy settings.
-        """
-        return os.environ.copy()
+        env = os.environ.copy()
+        for var in [
+            "HTTP_PROXY",
+            "HTTPS_PROXY",
+            "ALL_PROXY",
+            "NO_PROXY",
+            "http_proxy",
+            "https_proxy",
+            "all_proxy",
+            "no_proxy",
+        ]:
+            env.pop(var, None)
+        return env

@@ -10,7 +10,7 @@ from pathlib import Path
 # Добавляем корень проекта в path
 sys.path.append(str(Path(__file__).parent.parent))
 
-from config import Config
+from app.config import Config
 
 def test_env_vars():
     """Тестируем раскрытие переменных окружения в конфигурации."""

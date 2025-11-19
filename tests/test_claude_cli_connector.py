@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from connectors.claude_cli_connector import ClaudeCLICodeConnector
+from app.connectors.claude_cli_connector import ClaudeCLICodeConnector
 
 MOCK_SCRIPT = """
 import argparse

@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 import pytest_asyncio
 
-from connectors.gemini_acp_connector import GeminiACPConnector
+from app.connectors.gemini_acp_connector import GeminiACPConnector
 
 
 MOCK_SERVER_SOURCE = """

@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from connectors.codex_cli_connector import CodexCLIConnector
+from app.connectors.codex_cli_connector import CodexCLIConnector
 
 MOCK_SCRIPT = """
 import json

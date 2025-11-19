@@ -591,7 +591,7 @@ class SystemValidator:
                 sys.path.insert(0, str(self.project_root))
                 from telegram import Update
                 from telegram.ext import Application, CommandHandler
-                from config import Config
+                from app.config import Config
 
                 # Validate configuration
                 Config.validate()

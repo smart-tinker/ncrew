@@ -12,11 +12,11 @@ import time
 from datetime import datetime
 from typing import List, Dict, Optional, Any, Tuple, AsyncGenerator
 
-from config import Config, RoleConfig
-from storage.file_storage import FileStorage
-from connectors import get_connector_class, get_connector_spec
-from connectors.base import BaseConnector
-from utils.logger import get_logger
+from app.config import Config, RoleConfig
+from app.storage.file_storage import FileStorage
+from app.connectors import get_connector_class, get_connector_spec
+from app.connectors.base import BaseConnector
+from app.utils.logger import get_logger
 
 
 class NeuroCrewLab:

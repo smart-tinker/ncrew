@@ -9,7 +9,7 @@ import shlex
 import uuid
 from typing import List
 
-from connectors.base import BaseConnector
+from app.connectors.base import BaseConnector
 
 
 class ClaudeCLICodeConnector(BaseConnector):

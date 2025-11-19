@@ -145,10 +145,8 @@ setup_configuration() {
 start_application() {
     print_info "Starting NeuroCrew Lab..."
 
-    # Set PYTHONPATH if using virtual environment
-    if [[ "$PRODUCTION_MODE" != true && -d ".venv" ]]; then
-        export PYTHONPATH="$(pwd)/.venv/lib/python3.x/site-packages:$PYTHONPATH"
-    fi
+    # Set PYTHONPATH to include current directory
+    export PYTHONPATH="$(pwd):$PYTHONPATH"
 
     # Start the application
     if [[ "$PRODUCTION_MODE" == true ]]; then

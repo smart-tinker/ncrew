@@ -9,7 +9,7 @@ import asyncio
 import time
 from abc import ABC, abstractmethod
 from typing import Optional
-from utils.logger import get_logger
+from app.utils.logger import get_logger
 
 
 class BaseConnector(ABC):

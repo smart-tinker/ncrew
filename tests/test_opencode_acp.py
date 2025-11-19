@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 import pytest_asyncio
 
-from connectors.opencode_acp_connector import OpenCodeACPConnector
+from app.connectors.opencode_acp_connector import OpenCodeACPConnector
 
 
 MOCK_SERVER_SOURCE = """

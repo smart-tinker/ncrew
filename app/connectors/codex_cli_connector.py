@@ -8,7 +8,7 @@ import os
 import shlex
 from typing import List
 
-from connectors.base import BaseConnector
+from app.connectors.base import BaseConnector
 
 
 class CodexCLIConnector(BaseConnector):

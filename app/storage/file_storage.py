@@ -14,8 +14,8 @@ from typing import List, Dict, Optional, Any
 import aiofiles
 import os
 
-from config import Config
-from utils.logger import get_logger
+from app.config import Config
+from app.utils.logger import get_logger
 
 
 class FileStorage:

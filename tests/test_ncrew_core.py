@@ -1,8 +1,8 @@
 import pytest
 import asyncio
 from unittest.mock import MagicMock, AsyncMock, patch
-from ncrew import NeuroCrewLab
-from config import RoleConfig
+from app.core.engine import NeuroCrewLab
+from app.config import RoleConfig
 
 
 @pytest.fixture
@@ -16,7 +16,7 @@ def mock_storage():
 @pytest.fixture
 def ncrew_lab(mock_storage):
     # Patch Config where it is used (ncrew module)
-    with patch("ncrew.Config") as mock_config:
+    with patch("app.core.engine.Config") as mock_config:
         mock_config.is_role_based_enabled.return_value = True
         mock_config.get_role_sequence.return_value = [
             RoleConfig(
@@ -42,11 +42,11 @@ def ncrew_lab(mock_storage):
         }
 
         # Also patch get_connector_spec in ncrew to avoid validation errors
-        with patch("ncrew.get_connector_spec") as mock_spec:
+        with patch("app.core.engine.get_connector_spec") as mock_spec:
             mock_spec.return_value = MagicMock(requires_cli=False)
 
             # Patch connector creation
-            with patch("ncrew.get_connector_class") as mock_get_connector:
+            with patch("app.core.engine.get_connector_class") as mock_get_connector:
                 MockConnector = MagicMock()
                 # Setup mock connector instance
                 mock_instance = MagicMock()
