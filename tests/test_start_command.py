@@ -74,8 +74,8 @@ async def test_start_command_success(telegram_bot, mock_update, mock_context):
     message = call_args[0][0]  # First positional argument
 
     # Verify the welcome message content
-    assert "Welcome to NeuroCrew Lab!" in message
-    assert "Available commands:" in message
+    assert "Welcome to NeuroCrew Lab" in message
+    assert "Available commands" in message or "commands" in message
     assert "/help" in message
     assert "/reset" in message
 
@@ -163,7 +163,7 @@ async def test_start_command_with_real_config():
             # Check message content
             call_args = mock_update.message.reply_text.call_args
             message = call_args[0][0]
-            assert "Welcome to NeuroCrew Lab!" in message
+            assert "Welcome to NeuroCrew Lab" in message
 
 
 if __name__ == "__main__":

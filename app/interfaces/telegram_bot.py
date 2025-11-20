@@ -46,7 +46,7 @@ class TelegramBot:
 
         try:
             # Initialize application with main listener bot token
-            bot_token = Config.MAIN_BOT_TOKEN or Config.TELEGRAM_BOT_TOKEN
+            bot_token = Config.MAIN_BOT_TOKEN
 
             # Create application directly using system settings
             self.application = Application.builder().token(bot_token).build()
@@ -84,10 +84,12 @@ class TelegramBot:
                 f"DEBUG: Sending startup message to {Config.TARGET_CHAT_ID}"
             )
             try:
+                startup_msg = "🚀 **NeuroCrew Lab запускается...**\nСбор команды и инициализация агентов."
+                formatted_startup = format_telegram_message(startup_msg)
                 await self.application.bot.send_message(
                     chat_id=Config.TARGET_CHAT_ID,
-                    text="🚀 **NeuroCrew Lab запускается...**\nСбор команды и инициализация агентов.",
-                    parse_mode="Markdown",
+                    text=formatted_startup,
+                    parse_mode="MarkdownV2",
                 )
                 self.logger.info("DEBUG: Startup message sent")
             except Exception as e:
@@ -150,10 +152,12 @@ class TelegramBot:
 
         if Config.TARGET_CHAT_ID:
             try:
+                ready_msg = "💬 **Команда в сборе и готова к работе.** Жду ваших указаний."
+                formatted_ready = format_telegram_message(ready_msg)
                 await self.application.bot.send_message(
                     chat_id=Config.TARGET_CHAT_ID,
-                    text="💬 **Команда в сборе и готова к работе.** Жду ваших указаний.",
-                    parse_mode="Markdown",
+                    text=formatted_ready,
+                    parse_mode="MarkdownV2",
                 )
                 self.logger.info(
                     f"Sent 'ready' message to chat ID {Config.TARGET_CHAT_ID}."
@@ -274,7 +278,8 @@ class TelegramBot:
             await self._ensure_ncrew_initialized()
 
             welcome_msg = format_welcome_message()
-            await update.message.reply_text(welcome_msg, parse_mode="Markdown")
+            formatted_msg = format_telegram_message(welcome_msg)
+            await update.message.reply_text(formatted_msg, parse_mode="MarkdownV2")
 
             self.logger.info(f"User {update.effective_user.id} started the bot")
 
@@ -294,7 +299,8 @@ class TelegramBot:
         """
         try:
             help_msg = format_help_message()
-            await update.message.reply_text(help_msg, parse_mode="Markdown")
+            formatted_msg = format_telegram_message(help_msg)
+            await update.message.reply_text(formatted_msg, parse_mode="MarkdownV2")
 
             self.logger.info(f"User {update.effective_user.id} requested help")
 
@@ -348,8 +354,9 @@ class TelegramBot:
 
             agent_status = await self.ncrew.get_agent_status()
             status_msg = format_status_message(agent_status)
+            formatted_msg = format_telegram_message(status_msg)
 
-            await update.message.reply_text(status_msg, parse_mode="Markdown")
+            await update.message.reply_text(formatted_msg, parse_mode="MarkdownV2")
 
             self.logger.info(f"User {update.effective_user.id} requested status")
 
@@ -379,7 +386,8 @@ class TelegramBot:
 💬 **Conversations Processed:** {metrics["conversations_processed"]}
 📝 **Messages Processed:** {metrics["messages_processed"]}"""
 
-            await update.message.reply_text(metrics_msg, parse_mode="Markdown")
+            formatted_msg = format_telegram_message(metrics_msg)
+            await update.message.reply_text(formatted_msg, parse_mode="MarkdownV2")
 
             self.logger.info(f"User {update.effective_user.id} requested metrics")
 
@@ -410,10 +418,11 @@ class TelegramBot:
                 "• Qwen Code ✅\n"
                 "• Gemini CLI 🚧\n"
                 "• Claude-Code 🚧\n\n"
-                "*Currently in MVP development phase*"
+                "_Currently in MVP development phase_"
             )
 
-            await update.message.reply_text(about_msg, parse_mode="Markdown")
+            formatted_msg = format_telegram_message(about_msg)
+            await update.message.reply_text(formatted_msg, parse_mode="MarkdownV2")
 
             self.logger.info(f"User {update.effective_user.id} requested about")
 
@@ -455,7 +464,8 @@ class TelegramBot:
                 lines.append(f"{emoji} {arrow} {agent['name']} ({status})")
 
             msg = "\n".join(lines)
-            await update.message.reply_text(msg, parse_mode="Markdown")
+            formatted_msg = format_telegram_message(msg)
+            await update.message.reply_text(formatted_msg, parse_mode="MarkdownV2")
 
             self.logger.info(
                 f"User {update.effective_user.id} requested agent information"
@@ -489,7 +499,8 @@ class TelegramBot:
                 if agent_info:
                     msg += f"\n📍 **Sequence position:** {agent_info.get('agent_index', 0) + 1}/{agent_info.get('total_agents', 0)}"
 
-                await update.message.reply_text(msg, parse_mode="Markdown")
+                formatted_msg = format_telegram_message(msg)
+                await update.message.reply_text(formatted_msg, parse_mode="MarkdownV2")
                 self.logger.info(
                     f"User {update.effective_user.id} switched to agent: {next_agent}"
                 )
@@ -679,9 +690,10 @@ class TelegramBot:
             )
 
             status_msg = "\n".join(status_lines)
+            formatted_status = format_telegram_message(status_msg)
 
             await self.application.bot.send_message(
-                chat_id, status_msg, parse_mode="Markdown"
+                chat_id, formatted_status, parse_mode="MarkdownV2"
             )
 
         except Exception as e:
