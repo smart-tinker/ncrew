@@ -208,7 +208,7 @@ def format_help_message() -> str:
 def _markdown_to_markdownv2(text: str) -> str:
     """
     Convert standard Markdown to Telegram MarkdownV2 format.
-    
+
     Handles:
     - Headers (#, ##, ###) → bold text
     - **bold** → *bold*
@@ -219,16 +219,16 @@ def _markdown_to_markdownv2(text: str) -> str:
 
     Args:
         text: Standard Markdown text
-        
+
     Returns:
         str: Text converted to MarkdownV2 format (before escaping)
     """
     if not text:
         return ""
-    
+
     # Split by code blocks first to avoid processing inside them
     parts = re.split(r"(```.*?```)", text, flags=re.DOTALL)
-    
+
     result_parts = []
     for part in parts:
         if part.startswith("```"):
@@ -237,15 +237,15 @@ def _markdown_to_markdownv2(text: str) -> str:
         else:
             # Process headers: # Title → *Title* (use bold since MarkdownV2 has no headers)
             part = re.sub(r"^#+\s+(.+)$", r"*\1*", part, flags=re.MULTILINE)
-            
+
             # Convert **bold** to *bold* (MarkdownV2 uses single asterisk)
             part = re.sub(r"\*\*(.+?)\*\*", r"*\1*", part)
-            
+
             # Convert _text_ italic patterns (already compatible)
             # Keep *text* single asterisks as they will be handled as formatting
-            
+
             result_parts.append(part)
-    
+
     return "".join(result_parts)
 
 
@@ -253,14 +253,21 @@ def format_telegram_message(text: str) -> str:
     """
     Format text for Telegram MarkdownV2 with proper escaping outside code blocks.
 
+    This function performs a two-step process:
+    1. Convert standard Markdown to MarkdownV2 format (_markdown_to_markdownv2)
+    2. Escape special characters while preserving formatting and code blocks
+
     Handles:
     - Conversion from Markdown to MarkdownV2 format
     - Characters to escape: _ * [ ] ( ) ~ > # + - = | { } . !
-    - Preserves formatting markers (*bold*, _italic_)
-    - Preserves code blocks (```...```) and inline code (`...`)
+    - Preserves formatting markers (*bold*, _italic_) during escaping
+    - Preserves code blocks (```...```) and inline code (`...`) completely
+
+    The function uses placeholder-based preservation to avoid escaping formatting
+    markers, ensuring that *bold* and _italic_ text remain properly formatted.
 
     Args:
-        text: Text to format (can be Markdown)
+        text: Text to format (can be standard Markdown)
 
     Returns:
         str: Telegram-formatted text (MarkdownV2 compatible)
@@ -299,7 +306,7 @@ def format_telegram_message(text: str) -> str:
                     # Use placeholders with digits only (won't be escaped)
                     preserved = {}
                     marker_count = 0
-                    
+
                     # Preserve *bold* markers
                     def preserve_bold(m):
                         nonlocal marker_count
@@ -307,9 +314,9 @@ def format_telegram_message(text: str) -> str:
                         preserved[key] = m.group(0)
                         marker_count += 1
                         return key
-                    
+
                     inline_part = re.sub(r"\*[^\*\n]+\*", preserve_bold, inline_part)
-                    
+
                     # Preserve _italic_ markers
                     def preserve_italic(m):
                         nonlocal marker_count
@@ -317,18 +324,18 @@ def format_telegram_message(text: str) -> str:
                         preserved[key] = m.group(0)
                         marker_count += 1
                         return key
-                    
+
                     inline_part = re.sub(r"_[^_\n]+_", preserve_italic, inline_part)
-                    
+
                     # Now escape special chars
                     escaped = re.sub(
                         f"([{re.escape(escape_chars)}])", r"\\\1", inline_part
                     )
-                    
+
                     # Restore formatting markers
                     for key, value in preserved.items():
                         escaped = escaped.replace(key, value)
-                    
+
                     final_parts.append(escaped)
 
     return "".join(final_parts)
