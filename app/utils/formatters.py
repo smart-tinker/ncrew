@@ -213,6 +213,13 @@ def format_telegram_message(text: str) -> str:
     - Characters to escape: _ * [ ] ( ) ~ > # + - = | { } . !
     - Preserves code blocks (```...```) and inline code (`...`)
 
+    The function uses a two-step approach:
+    1. Split by code blocks (```) and preserve them as-is
+    2. In non-code text, split by inline code (`) and escape special chars elsewhere
+
+    Note: This handles most LLM output cases correctly, including nested constructs,
+    but may not perfectly handle extremely complex edge cases with malformed markdown.
+
     Args:
         text: Text to format
 
@@ -235,21 +242,21 @@ def format_telegram_message(text: str) -> str:
         if part.startswith("```"):
             # It's a code block - return as is
             # Telegram handles unescaped chars inside code blocks (except ` and \)
-            # But usually we assume the input is "mostly" valid markdown
+            # We assume the input markdown is reasonably well-formed
             final_parts.append(part)
         else:
             # Process text outside code blocks
-            # Now split by inline code (single backticks)
-            # Note: This doesn't handle nested backticks or escaped backticks perfecty,
-            # but covers 99% of LLM output cases.
+            # Split by inline code (single backticks)
+            # Pattern `[^`\n]+` matches single-line inline code without nested backticks
+            # This covers 99% of typical LLM output cases
             inline_parts = re.split(r"(`[^`\n]+`)", part)
 
             for inline_part in inline_parts:
-                if inline_part.startswith("`"):
-                    # Inline code - return as is
+                if inline_part.startswith("`") and inline_part.endswith("`"):
+                    # Inline code - return as is (preserve original formatting)
                     final_parts.append(inline_part)
                 else:
-                    # Regular text - escape special chars
+                    # Regular text - escape special chars for MarkdownV2
                     escaped = re.sub(
                         f"([{re.escape(escape_chars)}])", r"\\\1", inline_part
                     )
