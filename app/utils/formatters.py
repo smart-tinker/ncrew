@@ -116,16 +116,16 @@ def format_inline_code(code: str) -> str:
 
 def format_agent_response(agent_name: str, response: str) -> str:
     """
-    Format an agent response for display.
+    Format an agent response for display in MarkdownV2.
 
     Args:
         agent_name: Name of the agent
-        response: Agent's response
+        response: Agent's response (should be pre-formatted with format_telegram_message)
 
     Returns:
-        str: Formatted response
+        str: Formatted response (MarkdownV2 compatible)
     """
-    return f"🤖 *{agent_name.title()}*\n\n{response}"
+    return f"🤖 **{agent_name.title()}**\n\n{response}"
 
 
 def format_error_message(error_type: str, message: str) -> str:
@@ -137,9 +137,9 @@ def format_error_message(error_type: str, message: str) -> str:
         message: Error message
 
     Returns:
-        str: Formatted error message
+        str: Formatted error message (will be formatted by format_telegram_message)
     """
-    return f"❌ *{error_type}*\n\n{message}"
+    return f"❌ **{error_type}**\n\n{message}"
 
 
 def format_status_message(status: dict) -> str:
@@ -150,9 +150,9 @@ def format_status_message(status: dict) -> str:
         status: Dictionary of agent statuses
 
     Returns:
-        str: Formatted status message
+        str: Formatted status message (will be formatted by format_telegram_message)
     """
-    lines = ["🤖 *Agent Status*:"]
+    lines = ["🤖 **Agent Status**:"]
 
     for agent_name, available in status.items():
         emoji = "✅" if available else "❌"
@@ -166,12 +166,12 @@ def format_welcome_message() -> str:
     Get the welcome message for the bot.
 
     Returns:
-        str: Welcome message
+        str: Welcome message (will be formatted by format_telegram_message)
     """
     return (
-        "🚀 *Welcome to NeuroCrew Lab!*\n\n"
+        "🚀 **Welcome to NeuroCrew Lab**\n\n"
         "I orchestrate multiple AI coding agents to help you with your tasks.\n\n"
-        "*Available commands:*\n"
+        "**Available commands:**\n"
         "/help - Show help\n"
         "/reset - Reset conversation\n"
         "/status - Check agent status\n\n"
@@ -184,11 +184,11 @@ def format_help_message() -> str:
     Get the help message for the bot.
 
     Returns:
-        str: Help message
+        str: Help message (will be formatted by format_telegram_message)
     """
     return (
-        "🤖 *NeuroCrew Lab Help*\n\n"
-        "*Commands:*\n"
+        "🤖 **NeuroCrew Lab Help**\n\n"
+        "**Commands:**\n"
         "/start - Welcome message\n"
         "/help - This help message\n"
         "/reset - Clear conversation history\n"
@@ -196,32 +196,78 @@ def format_help_message() -> str:
         "/agents - Show current agent sequence\n"
         "/next - Switch to next agent\n"
         "/about - About NeuroCrew Lab\n\n"
-        "*How it works:*\n"
+        "**How it works:**\n"
         "• I cycle through different AI agents for each message\n"
         "• Each agent has unique capabilities and perspective\n"
         "• Use /agents to see your current agent sequence\n"
         "• Use /next to skip to the next available agent\n\n"
-        "🎯 *Tip:* Different agents excel at different tasks!"
+        "🎯 **Tip:** Different agents excel at different tasks!"
     )
+
+
+def _markdown_to_markdownv2(text: str) -> str:
+    """
+    Convert standard Markdown to Telegram MarkdownV2 format.
+
+    Handles:
+    - Headers (#, ##, ###) → bold text
+    - **bold** → *bold*
+    - *italic* or _italic_ → _italic_
+    - Lists (- item, * item) → preserved with escaped chars
+    - ```code``` blocks → preserved
+    - `inline code` → preserved
+
+    Args:
+        text: Standard Markdown text
+
+    Returns:
+        str: Text converted to MarkdownV2 format (before escaping)
+    """
+    if not text:
+        return ""
+
+    # Split by code blocks first to avoid processing inside them
+    parts = re.split(r"(```.*?```)", text, flags=re.DOTALL)
+
+    result_parts = []
+    for part in parts:
+        if part.startswith("```"):
+            # Code block - leave as is
+            result_parts.append(part)
+        else:
+            # Process headers: # Title → *Title* (use bold since MarkdownV2 has no headers)
+            part = re.sub(r"^#+\s+(.+)$", r"*\1*", part, flags=re.MULTILINE)
+
+            # Convert **bold** to *bold* (MarkdownV2 uses single asterisk)
+            part = re.sub(r"\*\*(.+?)\*\*", r"*\1*", part)
+
+            # Convert _text_ italic patterns (already compatible)
+            # Keep *text* single asterisks as they will be handled as formatting
+
+            result_parts.append(part)
+
+    return "".join(result_parts)
 
 
 def format_telegram_message(text: str) -> str:
     """
     Format text for Telegram MarkdownV2 with proper escaping outside code blocks.
 
-    Handles MarkdownV2 escaping requirements:
+    This function performs a two-step process:
+    1. Convert standard Markdown to MarkdownV2 format (_markdown_to_markdownv2)
+    2. Escape special characters while preserving formatting and code blocks
+
+    Handles:
+    - Conversion from Markdown to MarkdownV2 format
     - Characters to escape: _ * [ ] ( ) ~ > # + - = | { } . !
-    - Preserves code blocks (```...```) and inline code (`...`)
+    - Preserves formatting markers (*bold*, _italic_) during escaping
+    - Preserves code blocks (```...```) and inline code (`...`) completely
 
-    The function uses a two-step approach:
-    1. Split by code blocks (```) and preserve them as-is
-    2. In non-code text, split by inline code (`) and escape special chars elsewhere
-
-    Note: This handles most LLM output cases correctly, including nested constructs,
-    but may not perfectly handle extremely complex edge cases with malformed markdown.
+    The function uses placeholder-based preservation to avoid escaping formatting
+    markers, ensuring that *bold* and _italic_ text remain properly formatted.
 
     Args:
-        text: Text to format
+        text: Text to format (can be standard Markdown)
 
     Returns:
         str: Telegram-formatted text (MarkdownV2 compatible)
@@ -229,7 +275,10 @@ def format_telegram_message(text: str) -> str:
     if not text:
         return ""
 
-    # Characters requiring escape in MarkdownV2 outside of code
+    # First, convert Markdown to MarkdownV2 format
+    text = _markdown_to_markdownv2(text)
+
+    # Characters requiring escape in MarkdownV2 outside of formatting
     escape_chars = r"_*[]()~>#+-=|{}.!"
 
     # Split by code blocks (triple backticks)
@@ -241,25 +290,52 @@ def format_telegram_message(text: str) -> str:
     for part in parts:
         if part.startswith("```"):
             # It's a code block - return as is
-            # Telegram handles unescaped chars inside code blocks (except ` and \)
-            # We assume the input markdown is reasonably well-formed
             final_parts.append(part)
         else:
             # Process text outside code blocks
-            # Split by inline code (single backticks)
-            # Pattern `[^`\n]+` matches single-line inline code without nested backticks
-            # This covers 99% of typical LLM output cases
+            # Now split by inline code (single backticks)
             inline_parts = re.split(r"(`[^`\n]+`)", part)
 
             for inline_part in inline_parts:
-                if inline_part.startswith("`") and inline_part.endswith("`"):
-                    # Inline code - return as is (preserve original formatting)
+                if inline_part.startswith("`"):
+                    # Inline code - return as is
                     final_parts.append(inline_part)
                 else:
-                    # Regular text - escape special chars for MarkdownV2
+                    # Regular text - escape special chars, but preserve formatting
+                    # Preserve *text* (bold) and _text_ (italic) by temporarily replacing them
+                    # Use placeholders with digits only (won't be escaped)
+                    preserved = {}
+                    marker_count = 0
+
+                    # Preserve *bold* markers
+                    def preserve_bold(m):
+                        nonlocal marker_count
+                        key = f"BOLD{marker_count:04d}"
+                        preserved[key] = m.group(0)
+                        marker_count += 1
+                        return key
+
+                    inline_part = re.sub(r"\*[^\*\n]+\*", preserve_bold, inline_part)
+
+                    # Preserve _italic_ markers
+                    def preserve_italic(m):
+                        nonlocal marker_count
+                        key = f"ITALIC{marker_count:04d}"
+                        preserved[key] = m.group(0)
+                        marker_count += 1
+                        return key
+
+                    inline_part = re.sub(r"_[^_\n]+_", preserve_italic, inline_part)
+
+                    # Now escape special chars
                     escaped = re.sub(
                         f"([{re.escape(escape_chars)}])", r"\\\1", inline_part
                     )
+
+                    # Restore formatting markers
+                    for key, value in preserved.items():
+                        escaped = escaped.replace(key, value)
+
                     final_parts.append(escaped)
 
     return "".join(final_parts)
