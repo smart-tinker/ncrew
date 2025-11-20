@@ -61,7 +61,7 @@ roles:
   telegram_bot_name: Scrum_Master_Bot
   system_prompt_file: roles/prompts/scrum_master.md
   agent_type: claude_cli
-  cli_command: "glm  -p --output-format stream-json --permission-mode bypassPermissions\
+  cli_command: "claude -p --output-format stream-json --permission-mode bypassPermissions\
     \ --dangerously-skip-permissions --verbose"
   description: "Scrum Master, обеспечивает Agile методологии"
   is_moderator: true
