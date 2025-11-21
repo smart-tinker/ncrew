@@ -138,8 +138,9 @@ async def async_main():
 
     # Perform startup introductions
     logger.info("Performing startup agent introductions...")
-    await bot_instance.run_startup_introductions()
-    logger.info("Startup agent introductions completed")
+    # Temporarily disabled due to OpenCode ACP initialization issues
+    # await bot_instance.run_startup_introductions()
+    logger.info("Startup agent introductions skipped (temporarily disabled)")
 
     shutdown_event = asyncio.Event()
     shutdown_task: Optional[asyncio.Task] = None
