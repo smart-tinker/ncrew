@@ -156,7 +156,10 @@ class Config:
     role_based_enabled: bool = False
 
     # System Configuration
-    MAX_CONVERSATION_LENGTH: int = int(os.getenv("MAX_CONVERSATION_LENGTH", "50"))
+    # Maximum conversation length: 200 messages is a balance between context retention
+    # and memory/performance. Allows ~30-60 minutes of active multi-agent conversation.
+    # Can be increased via .env if more context needed (e.g., 500 for extended sessions).
+    MAX_CONVERSATION_LENGTH: int = int(os.getenv("MAX_CONVERSATION_LENGTH", "200"))
     AGENT_TIMEOUT: int = int(os.getenv("AGENT_TIMEOUT", "600"))
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO").upper()
     DATA_DIR: Path = Path(os.getenv("DATA_DIR", "./data"))
