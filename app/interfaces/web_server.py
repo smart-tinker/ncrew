@@ -230,7 +230,7 @@ def save():
 
     threading.Thread(target=create_reload_flag, daemon=True).start()
 
-    return redirect(url_for("index"))
+    return redirect(url_for("settings"))
 
 
 @app.route("/prompt", methods=["GET"])
