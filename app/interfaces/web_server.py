@@ -272,6 +272,156 @@ def save_prompt():
         return jsonify({"error": str(e)}), 500
 
 
+# --- Chat API Routes ---
+@app.route("/chat")
+@requires_auth
+def chat_page():
+    """Render the web chat page."""
+    return render_template("chat.html")
+
+
+@app.route("/api/chat/history")
+@requires_auth
+def get_chat_history():
+    """Get chat history from FileStorage."""
+    import asyncio
+    from app.config import Config
+    from app.storage.file_storage import FileStorage
+
+    try:
+        chat_id = Config.TARGET_CHAT_ID
+        if not chat_id:
+            return jsonify({"error": "TARGET_CHAT_ID not configured"}), 400
+
+        # Run async storage operation
+        storage = FileStorage()
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        conversation = loop.run_until_complete(storage.load_conversation(chat_id))
+        loop.close()
+
+        # Format messages for frontend
+        messages = []
+        for msg in conversation:
+            messages.append({
+                "role": msg.get("role", "unknown"),
+                "role_display": msg.get("role_display") or msg.get("display_name") or msg.get("role", "Unknown"),
+                "text": msg.get("text") or msg.get("content", ""),
+                "timestamp": msg.get("timestamp", ""),
+            })
+
+        return jsonify({"messages": messages, "total": len(messages)})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/chat/updates")
+@requires_auth
+def get_chat_updates():
+    """Get new messages since last_index (for polling)."""
+    import asyncio
+    from app.config import Config
+    from app.storage.file_storage import FileStorage
+
+    try:
+        last_index = request.args.get("last_index", 0, type=int)
+        chat_id = Config.TARGET_CHAT_ID
+        if not chat_id:
+            return jsonify({"error": "TARGET_CHAT_ID not configured"}), 400
+
+        # Run async storage operation
+        storage = FileStorage()
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        conversation = loop.run_until_complete(storage.load_conversation(chat_id))
+        loop.close()
+
+        # Get only new messages
+        new_messages = conversation[last_index:] if last_index < len(conversation) else []
+
+        messages = []
+        for msg in new_messages:
+            messages.append({
+                "role": msg.get("role", "unknown"),
+                "role_display": msg.get("role_display") or msg.get("display_name") or msg.get("role", "Unknown"),
+                "text": msg.get("text") or msg.get("content", ""),
+                "timestamp": msg.get("timestamp", ""),
+            })
+
+        return jsonify({"messages": messages})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/chat/message", methods=["POST"])
+@requires_auth
+def send_chat_message():
+    """
+    Accept a message from the web chat and process it through the engine.
+    This integrates the web interface with the bot's message handling.
+    """
+    import asyncio
+    from app.config import Config
+    from app.storage.file_storage import FileStorage
+    from datetime import datetime
+
+    try:
+        data = request.json
+        text = data.get("text", "").strip()
+
+        if not text:
+            return jsonify({"error": "Message cannot be empty"}), 400
+
+        chat_id = Config.TARGET_CHAT_ID
+        if not chat_id:
+            return jsonify({"error": "TARGET_CHAT_ID not configured"}), 400
+
+        # Store the user message
+        storage = FileStorage()
+        user_message = {
+            "role": "user",
+            "role_display": "User",
+            "text": text,
+            "timestamp": datetime.now().isoformat(),
+        }
+
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+        # Add message to storage
+        success = loop.run_until_complete(storage.add_message(chat_id, user_message))
+
+        if not success:
+            loop.close()
+            return jsonify({"error": "Failed to store message"}), 500
+
+        # Trigger message processing through engine
+        # Import here to avoid circular imports
+        from app.core.engine import NeuroCrewLab
+        from app.interfaces.telegram_bot import TelegramBot
+
+        try:
+            ncrew = NeuroCrewLab(storage=storage)
+            loop.run_until_complete(ncrew.initialize())
+
+            # Process the message through the engine
+            # This will cause agents to respond
+            loop.run_until_complete(ncrew.handle_message(text, chat_id))
+        except Exception as engine_error:
+            # Log but don't fail the request - message was stored
+            import logging
+            logging.warning(f"Engine processing error: {engine_error}")
+
+        loop.close()
+
+        return jsonify({"success": True, "message": "Message sent and processed"})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 def run_web_server():
     import time
     import logging

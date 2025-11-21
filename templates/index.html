@@ -144,7 +144,12 @@
         <div class="dark-mode-toggle" onclick="toggleDarkMode()">
             <i class="fas fa-moon"></i>
         </div>
-        <h1><i class="fas fa-cog"></i> NeuroCrew Lab - Настройки</h1>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+            <h1><i class="fas fa-cog"></i> NeuroCrew Lab - Настройки</h1>
+            <a href="/chat" style="padding: 0.75rem 1.5rem; background-color: #28a745; color: white; text-decoration: none; border-radius: 4px; display: flex; align-items: center; gap: 0.5rem; font-weight: 600;">
+                <i class="fas fa-comments"></i> Открыть чат
+            </a>
+        </div>
         <form action="/save" method="post" id="roles-form">
             <div id="roles-container">
                 {% for role in roles %}
