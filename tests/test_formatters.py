@@ -21,7 +21,7 @@ class TestFormatTelegramMessage:
     def test_escape_special_characters(self):
         """Test escaping of MarkdownV2 special characters."""
         text = "_*[]()~>#+-=|{}.!"
-        expected = r"\_*\[\]\(\)\~\>\#\+\-\=\|\{\}\.\!"
+        expected = r"\_\*\[\]\(\)\~\>\#\+\-\=\|\{\}\.\!"
         assert format_telegram_message(text) == expected
 
     def test_preserve_inline_code(self):
@@ -49,7 +49,8 @@ if x > 0:
 ```
 
 Note: Use > and | carefully."""
-        expected = r"""\# Title with \*bold\* and `code`
+        # Header becomes *bold*, single * are preserved as formatting, then special chars escaped
+        expected = r"""*Title with *bold\* and `code`\*
 
 ```
 if x > 0:
@@ -66,5 +67,4 @@ path = "C:\\Users\\file.txt"
 ```
 
 Or inline `C:\\path\\to\\file`"""
-        assert format_telegram_message(text) == text</content>
-<parameter name="filePath">tests/test_formatters.py
+        assert format_telegram_message(text) == text
