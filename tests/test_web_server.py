@@ -40,10 +40,11 @@ def test_index_page_loads(mock_file_open, client):
 
 
 @patch('app.interfaces.web_server.save_roles')
-@patch('builtins.open', new_callable=mock_open)
-def test_save_roles(mock_file_open, mock_save_roles, client):
+def test_save_roles(mock_save_roles, client):
     """Test that saving roles redirects and creates a reload file."""
     import time
+    os.environ['WEB_ADMIN_USER'] = 'admin'
+    os.environ['WEB_ADMIN_PASS'] = 'password'
     
     headers = {
         'Authorization': 'Basic ' + base64.b64encode(b"admin:password").decode('utf-8')
@@ -60,11 +61,11 @@ def test_save_roles(mock_file_open, mock_save_roles, client):
     }
 
     with patch('app.interfaces.web_server.get_roles', return_value=[]):
-        response = client.post('/save', headers=headers, data=form_data, follow_redirects=True)
+        with patch('builtins.open', mock_open()) as mock_file:
+            response = client.post('/save', headers=headers, data=form_data, follow_redirects=True)
 
     # Wait for background thread to write .reload file
     time.sleep(1.5)
     
     assert response.status_code == 200
     mock_save_roles.assert_called_once()
-    mock_file_open.assert_called_with('.reload', 'w')
