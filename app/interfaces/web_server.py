@@ -142,7 +142,15 @@ def save_roles(roles):
 
 @app.route("/")
 @requires_auth
-def index():
+def chat_page():
+    """Render the main web chat page."""
+    return render_template("chat.html")
+
+
+@app.route("/settings")
+@requires_auth
+def settings():
+    """Render the settings/admin page for role management."""
     roles = get_roles()
     return render_template("index.html", roles=roles)
 
@@ -273,13 +281,6 @@ def save_prompt():
 
 
 # --- Chat API Routes ---
-@app.route("/chat")
-@requires_auth
-def chat_page():
-    """Render the web chat page."""
-    return render_template("chat.html")
-
-
 @app.route("/api/chat/history")
 @requires_auth
 def get_chat_history():

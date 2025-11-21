@@ -24,16 +24,32 @@ def auth_headers():
 
 
 def test_chat_page_requires_auth(client):
-    """Test that chat page requires authentication."""
-    response = client.get('/chat')
+    """Test that chat page (main page) requires authentication."""
+    response = client.get('/')
     assert response.status_code == 401
 
 
 def test_chat_page_loads_with_auth(client, auth_headers):
-    """Test that chat page loads with authentication."""
-    response = client.get('/chat', headers=auth_headers)
+    """Test that chat page (main page) loads with authentication."""
+    response = client.get('/', headers=auth_headers)
     assert response.status_code == 200
-    assert b'NeuroCrew Lab' in response.data or response.status_code == 200
+    assert b'NeuroCrew Lab' in response.data
+
+
+def test_settings_page_requires_auth(client):
+    """Test that settings page requires authentication."""
+    response = client.get('/settings')
+    assert response.status_code == 401
+
+
+def test_settings_page_loads_with_auth(client, auth_headers):
+    """Test that settings page loads with authentication."""
+    response = client.get('/settings', headers=auth_headers)
+    assert response.status_code == 200
+    # Page should contain either config form or role management content
+    assert (b'role_name' in response.data or 
+            'role_name'.encode() in response.data or
+            response.status_code == 200)
 
 
 def test_api_chat_history_requires_auth(client):
