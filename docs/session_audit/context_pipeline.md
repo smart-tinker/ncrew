@@ -662,8 +662,8 @@ During execution, Role 0's process crashes:
 │ Cons:                                                  │
 │ • No long-term memory: Lost details from early msgs   │
 │ • Dependent on summaries: Must rely on other agents   │
-│ • Truncation risk: MAX_CONVERSATION_LENGTH = 50      │
-│ • Context gap: Agent can't reference older decisions  │
+│ • Truncation risk: MAX_CONVERSATION_LENGTH = 200 (default) │
+│ • Context gap: Agent can't reference older decisions      │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -724,7 +724,7 @@ role_prompt, has_updates = self._format_conversation_for_role(conversation, role
 **Change:** Keep last N messages (not first N)
 
 ```python
-# Instead of truncating to last 50:
+# Current default truncation to last 200:
 context_window = max(100, config.MAX_CONVERSATION_LENGTH)
 recent_messages = conversation[-context_window:]
 
@@ -885,23 +885,23 @@ t6:     Yield to Telegram  ← (FrontendDevRole, "Great, frontend should...")
 ### Scenario A: Conversation Exceeds MAX_CONVERSATION_LENGTH
 
 ```
-MAX_CONVERSATION_LENGTH = 50
+MAX_CONVERSATION_LENGTH = 200
 
-Messages 0-49 stored:   [msg0, msg1, ..., msg49]
-New message added:      [msg0, msg1, ..., msg49, msg50]
-                         (51 messages, over limit)
+Messages 0-199 stored:   [msg0, msg1, ..., msg199]
+New message added:       [msg0, msg1, ..., msg199, msg200]
+                          (201 messages, over limit)
 
 save_conversation called:
-├─ if len(conversation) > 50:
-│  └─ conversation = conversation[-50:]
-│     Result: [msg1, msg2, ..., msg50]  ← msg0 LOST
+├─ if len(conversation) > 200:
+│  └─ conversation = conversation[-200:]
+│     Result: [msg1, msg2, ..., msg200]  ← msg0 LOST
 │
 └─> write to storage
 ```
 
 **Consequence:**
-- msg0 and msg1 are lost permanently
-- Any context from earliest exchange disappears
+- Earliest messages (e.g., msg0) are lost permanently once the cap is exceeded
+- Any context from the earliest exchange disappears
 - `role_last_seen_index` is NOT adjusted
 - Role might point to index that no longer exists (safety check at line 527-528 handles this)
 
@@ -940,20 +940,20 @@ Next execution:
 **Severity:** High
 
 **Description:**
-- Conversations longer than 50 messages lose early context
-- No warning to users or agents
+- Conversations longer than 200 messages lose early context
+- Logging alerts when truncation occurs
 - Lost information cannot be recovered from storage
 
 **Current Mitigation:**
-- `MAX_CONVERSATION_LENGTH` config (default 50)
+- `MAX_CONVERSATION_LENGTH` config (default 200, ~30-60 min active session)
 - Storage backups created on `clear_conversation()`
-- No active mitigation during normal operation
+- Debug logging when truncation occurs
+- Can be increased via .env (e.g., 500 for extended sessions)
 
-**Recommended Mitigation:**
-- Increase default limit to 200-500
-- Add logging when truncation occurs
+**Additional Recommended Mitigation:**
 - Implement sliding window with summary of truncated messages
 - Consider implementing Option 3 (semantic summarization) from Section 4
+- Add user-visible warnings when approaching limit
 
 ### Risk 2: Index Out-of-Bounds After Truncation
 **Severity:** Medium
@@ -1148,8 +1148,8 @@ self.role_response_count: Dict[(int, str), int]
 - **Trade-offs:** Higher token usage, larger prompts, memory growth
 
 ### Recommended Immediate Actions
-1. **Increase `MAX_CONVERSATION_LENGTH`** from 50 to 200+ to reduce truncation risk
-2. **Add truncation logging** to alert when context is being lost
+1. **Keep `MAX_CONVERSATION_LENGTH` ≥ 200 by default** (done) and consider 300-500 for longer research sessions
+2. **Add truncation logging** to alert when context is being lost (partially done via debug logs)
 3. **Implement Option 1 (Simple Full-History)** for MVP if token budget allows
 4. **Document per-agent context scope** clearly in system prompts
 5. **Add health checks** to detect process crashes faster
@@ -1225,9 +1225,10 @@ self.role_response_count: Dict[(int, str), int]
 # app/config.py
 
 # Truncation limit (HIGHEST RISK FACTOR)
-MAX_CONVERSATION_LENGTH = int(os.getenv("MAX_CONVERSATION_LENGTH", "50"))
-# Effect: Conversations > 50 msgs lose early context
-# Recommendation: Increase to 200-500
+MAX_CONVERSATION_LENGTH = int(os.getenv("MAX_CONVERSATION_LENGTH", "200"))
+# Effect: Conversations > 200 msgs lose early context
+# Default 200 provides ~30-60 min of active multi-agent conversation
+# Can be increased via .env: 300-500 for extended sessions
 
 # System reminder frequency
 SYSTEM_REMINDER_INTERVAL = int(os.getenv("SYSTEM_REMINDER_INTERVAL", "5"))
@@ -1250,13 +1251,11 @@ TELEGRAM_MAX_MESSAGE_LENGTH = 4096
 ### Recommended .env Settings for Full History
 
 ```bash
-# Conservative (current)
-MAX_CONVERSATION_LENGTH=50
-
-# Recommended for better context
+# Balanced default (current)
 MAX_CONVERSATION_LENGTH=200
 
-# Aggressive (for research/testing)
+# Extended sessions / research
+MAX_CONVERSATION_LENGTH=300
 MAX_CONVERSATION_LENGTH=500
 
 # Reminder frequency (help agents stay in role)
