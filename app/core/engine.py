@@ -597,7 +597,7 @@ class NeuroCrewLab:
                 "role": "agent",
                 "agent_name": role.agent_type,
                 "role_name": role.role_name,
-                "role_display_name": role.display_name,
+                "role_display": role.display_name,
                 "content": response,
                 "timestamp": datetime.now().isoformat(),
             }
@@ -661,7 +661,7 @@ class NeuroCrewLab:
                 context_lines.append(f"User: {content}")
             elif msg.get("role") == "agent":
                 agent_name = msg.get(
-                    "role_display_name", msg.get("role_name", "Assistant")
+                    "role_display", msg.get("role_name", "Assistant")
                 )
                 content = msg.get("content", "")
                 context_lines.append(f"Assistant ({agent_name}): {content}")
@@ -1180,7 +1180,7 @@ class NeuroCrewLab:
                     "role": "agent",
                     "agent_name": role.agent_type,
                     "role_name": role.role_name,
-                    "role_display_name": role.display_name,
+                    "role_display": role.display_name,
                     "content": introduction_text,
                     "timestamp": datetime.now().isoformat(),
                 }
