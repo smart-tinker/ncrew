@@ -1158,6 +1158,159 @@ class NeuroCrewLab:
         # Create connector with pure stateful interface
         return connector_class()
 
+    async def _perform_sequential_introductions(
+        self, introduction_prompt: str, system_chat_id: int
+    ) -> AsyncGenerator[Tuple[RoleConfig, str], None]:
+        """Perform introductions sequentially (one agent at a time)."""
+        for i, role in enumerate(self.roles):
+            self.logger.info(f"Introducing role {i+1}/{len(self.roles)}: {role.role_name}...")
+            connector = None
+            introduction_text = (
+                f"Error: Could not get introduction from {role.display_name}."
+            )
+
+            try:
+                # Create a new temporary session for the agent to reset its context
+                connector = self._get_or_create_role_connector(system_chat_id, role)
+                if connector.is_alive():
+                    await connector.shutdown()
+
+                # Launch the agent and get its introduction
+                await connector.launch(role.cli_command, role.system_prompt)
+                self.logger.info(f"Launched {role.role_name} for introduction.")
+
+                # Use shorter timeout for introductions (they should be quick)
+                original_timeout = getattr(connector, 'request_timeout', None)
+                if hasattr(connector, 'request_timeout'):
+                    connector.request_timeout = 60.0  # 1 minute for introductions
+
+                try:
+                    response = await connector.execute(introduction_prompt)
+                finally:
+                    # Restore original timeout
+                    if original_timeout is not None:
+                        connector.request_timeout = original_timeout
+
+                introduction_text = response.strip()
+                self.logger.info(
+                    f"Introduction from {role.role_name}: {introduction_text[:100]}..."
+                )
+
+            except Exception as e:
+                self.logger.error(
+                    f"Failed to get introduction from {role.role_name}: {e}"
+                )
+            finally:
+                # Save introduction to conversation history
+                agent_message = {
+                    "role": "agent",
+                    "agent_name": role.agent_type,
+                    "role_name": role.role_name,
+                    "role_display": role.display_name,
+                    "content": introduction_text,
+                    "timestamp": datetime.now().isoformat(),
+                }
+                if Config.TARGET_CHAT_ID:
+                    await self.storage.add_message(Config.TARGET_CHAT_ID, agent_message)
+
+                # YIELD result immediately
+                yield (role, introduction_text)
+
+                # Shut down the temporary session
+                if connector:
+                    await connector.shutdown()
+                    key = (system_chat_id, role.role_name)
+                    if key in self.connector_sessions:
+                        del self.connector_sessions[key]
+                self.logger.info(
+                    f"Session for {role.role_name} closed after introduction."
+                )
+
+                # Add delay between introductions to prevent system overload
+                if i < len(self.roles) - 1:  # Don't delay after the last agent
+                    await asyncio.sleep(3.0)  # 3 second delay between agents
+                    self.logger.debug(f"Waiting 3 seconds before next agent introduction...")
+
+    async def _perform_parallel_introductions(
+        self, introduction_prompt: str, system_chat_id: int
+    ) -> AsyncGenerator[Tuple[RoleConfig, str], None]:
+        """Perform introductions in parallel (all agents simultaneously)."""
+        self.logger.warning("PARALLEL introductions may cause system overload and timeouts!")
+
+        async def introduce_single_role(role: RoleConfig) -> Tuple[RoleConfig, str]:
+            """Introduce a single role and return the result."""
+            connector = None
+            introduction_text = (
+                f"Error: Could not get introduction from {role.display_name}."
+            )
+
+            try:
+                # Create a new temporary session for the agent to reset its context
+                connector = self._get_or_create_role_connector(system_chat_id, role)
+                if connector.is_alive():
+                    await connector.shutdown()
+
+                # Launch the agent and get its introduction
+                await connector.launch(role.cli_command, role.system_prompt)
+                self.logger.info(f"Launched {role.role_name} for parallel introduction.")
+
+                # Use shorter timeout for introductions
+                original_timeout = getattr(connector, 'request_timeout', None)
+                if hasattr(connector, 'request_timeout'):
+                    connector.request_timeout = 60.0  # 1 minute for introductions
+
+                try:
+                    response = await connector.execute(introduction_prompt)
+                finally:
+                    # Restore original timeout
+                    if original_timeout is not None:
+                        connector.request_timeout = original_timeout
+
+                introduction_text = response.strip()
+                self.logger.info(
+                    f"Parallel introduction from {role.role_name}: {introduction_text[:100]}..."
+                )
+
+            except Exception as e:
+                self.logger.error(
+                    f"Failed parallel introduction from {role.role_name}: {e}"
+                )
+            finally:
+                # Save introduction to conversation history
+                agent_message = {
+                    "role": "agent",
+                    "agent_name": role.agent_type,
+                    "role_name": role.role_name,
+                    "role_display": role.display_name,
+                    "content": introduction_text,
+                    "timestamp": datetime.now().isoformat(),
+                }
+                if Config.TARGET_CHAT_ID:
+                    await self.storage.add_message(Config.TARGET_CHAT_ID, agent_message)
+
+                # Shut down the temporary session
+                if connector:
+                    await connector.shutdown()
+                    key = (system_chat_id, role.role_name)
+                    if key in self.connector_sessions:
+                        del self.connector_sessions[key]
+                self.logger.info(
+                    f"Parallel session for {role.role_name} closed after introduction."
+                )
+
+            return (role, introduction_text)
+
+        # Launch all introductions in parallel
+        tasks = [introduce_single_role(role) for role in self.roles]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        # Yield results as they complete (order may vary)
+        for result in results:
+            if isinstance(result, Exception):
+                self.logger.error(f"Parallel introduction task failed: {result}")
+                continue
+            yield result
+
     async def perform_startup_introductions(
         self,
     ) -> AsyncGenerator[Tuple[RoleConfig, str], None]:
@@ -1181,73 +1334,19 @@ class NeuroCrewLab:
             await self.storage.clear_conversation(Config.TARGET_CHAT_ID)
             await self._reset_chat_role_sessions(Config.TARGET_CHAT_ID)
 
-        for i, role in enumerate(self.roles):
-            self.logger.info(f"Introducing role {i+1}/{len(self.roles)}: {role.role_name}...")
-            connector = None
-            introduction_text = (
-                f"Error: Could not get introduction from {role.display_name}."
-            )
+        # Choose introduction strategy based on configuration
+        PARALLEL_INTRODUCTIONS = getattr(Config, 'PARALLEL_INTRODUCTIONS', False)
 
-            try:
-                # 2. Create a new temporary session for the agent to reset its context
-                connector = self._get_or_create_role_connector(SYSTEM_CHAT_ID, role)
-                if connector.is_alive():
-                    await connector.shutdown()
-
-                # 3. Launch the agent and get its introduction
-                await connector.launch(role.cli_command, role.system_prompt)
-                self.logger.info(f"Launched {role.role_name} for introduction.")
-
-                # Use shorter timeout for introductions (they should be quick)
-                original_timeout = getattr(connector, 'request_timeout', None)
-                if hasattr(connector, 'request_timeout'):
-                    connector.request_timeout = 60.0  # 1 minute for introductions
-
-                try:
-                    response = await connector.execute(introduction_prompt)
-                finally:
-                    # Restore original timeout
-                    if original_timeout is not None:
-                        connector.request_timeout = original_timeout
-                introduction_text = response.strip()
-                self.logger.info(
-                    f"Introduction from {role.role_name}: {introduction_text[:100]}..."
-                )
-
-            except Exception as e:
-                self.logger.error(
-                    f"Failed to get introduction from {role.role_name}: {e}"
-                )
-            finally:
-                # 4. Save introduction to conversation history
-                agent_message = {
-                    "role": "agent",
-                    "agent_name": role.agent_type,
-                    "role_name": role.role_name,
-                    "role_display": role.display_name,
-                    "content": introduction_text,
-                    "timestamp": datetime.now().isoformat(),
-                }
-                if Config.TARGET_CHAT_ID:
-                    await self.storage.add_message(Config.TARGET_CHAT_ID, agent_message)
-
-                # YIELD result immediately
-                yield (role, introduction_text)
-
-                # 5. Shut down the temporary session
-                if connector:
-                    await connector.shutdown()
-                    key = (SYSTEM_CHAT_ID, role.role_name)
-                    if key in self.connector_sessions:
-                        del self.connector_sessions[key]
-                self.logger.info(
-                    f"Session for {role.role_name} closed after introduction."
-                )
-
-                # Add delay between introductions to prevent system overload
-                if i < len(self.roles) - 1:  # Don't delay after the last agent
-                    await asyncio.sleep(3.0)  # 3 second delay between agents
-                    self.logger.debug(f"Waiting 3 seconds before next agent introduction...")
+        if PARALLEL_INTRODUCTIONS:
+            # Parallel approach - launch all agents simultaneously
+            self.logger.info("Using PARALLEL introduction strategy")
+            async for result in self._perform_parallel_introductions(introduction_prompt, SYSTEM_CHAT_ID):
+                yield result
+        else:
+            # Sequential approach - launch agents one by one
+            self.logger.info("Using SEQUENTIAL introduction strategy")
+            async for result in self._perform_sequential_introductions(introduction_prompt, SYSTEM_CHAT_ID):
+                yield result
 
         self.logger.info("=== AGENT INTRODUCTION SEQUENCE COMPLETE ===")
 
