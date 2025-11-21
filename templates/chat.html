@@ -269,12 +269,20 @@
         <div class="chat-header">
             <h1>
                 <i class="fas fa-comments"></i> NeuroCrew Lab Чат
+                {% if conversation_type %}
+                <span style="font-size: 0.8em; color: var(--secondary-color);">
+                    ({% if conversation_type == 'file' %}Файлы{% elif conversation_type == 'voice' %}Голос{% elif conversation_type == 'image' %}Изображения{% elif conversation_type == 'video' %}Видео{% endif %})
+                </span>
+                {% endif %}
             </h1>
             <div class="chat-header-actions">
                 <button class="dark-mode-toggle" onclick="toggleDarkMode()" title="Переключить тему">
                     <i class="fas fa-moon"></i>
                 </button>
-                <a href="/settings" class="back-button">
+                <a href="/" class="back-button" title="Выбрать другой тип консультации">
+                    <i class="fas fa-arrow-left"></i> Все консультации
+                </a>
+                <a href="/settings" class="back-button" title="Настройки">
                     <i class="fas fa-cog"></i> Настройки
                 </a>
             </div>

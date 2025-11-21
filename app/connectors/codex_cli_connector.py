@@ -6,6 +6,7 @@ import asyncio
 import json
 import os
 import shlex
+import uuid
 from typing import List
 
 from app.connectors.base import BaseConnector
@@ -23,6 +24,7 @@ class CodexCLIConnector(BaseConnector):
         self.base_command: str = self.DEFAULT_COMMAND
         self.system_prompt: str = ""
         self.thread_id: str | None = None
+        self.session_id: str | None = None
         self._initialized: bool = False
 
     def is_alive(self) -> bool:  # type: ignore[override]
@@ -32,6 +34,7 @@ class CodexCLIConnector(BaseConnector):
         self.base_command = command or self.DEFAULT_COMMAND
         self.system_prompt = system_prompt.strip()
         self.thread_id = None
+        self.session_id = str(uuid.uuid4())  # Generate unique session_id for each launch
         self._initialized = True
         await self._prime_session()
 
@@ -55,6 +58,7 @@ class CodexCLIConnector(BaseConnector):
 
     async def shutdown(self):
         self.thread_id = None
+        self.session_id = None
         self._initialized = False
 
     def check_availability(self) -> bool:  # type: ignore[override]

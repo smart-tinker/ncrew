@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NeuroCrew Lab - Консультации</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --bg-color: #f8f9fa;
+            --text-color: #212529;
+            --card-bg: #ffffff;
+            --border-color: #dee2e6;
+            --primary-color: #007bff;
+            --secondary-color: #6c757d;
+            --success-color: #28a745;
+            --info-color: #17a2b8;
+            --warning-color: #ffc107;
+            --danger-color: #dc3545;
+            --header-bg: #e9ecef;
+        }
+        body.dark-mode {
+            --bg-color: #212529;
+            --text-color: #f8f9fa;
+            --card-bg: #343a40;
+            --border-color: #495057;
+            --header-bg: #495057;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            line-height: 1.6;
+            margin: 0;
+            padding: 0;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 3rem;
+            padding: 2rem 0;
+        }
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
+            color: var(--primary-color);
+        }
+        .header p {
+            font-size: 1.2rem;
+            color: var(--secondary-color);
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        .conversation-types {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            margin-bottom: 2rem;
+        }
+        .conversation-card {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 2rem;
+            text-align: center;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+        }
+        .conversation-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+        }
+        .conversation-card.active {
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(0,123,255,0.1);
+        }
+        .conversation-icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            display: block;
+        }
+        .conversation-card.file .conversation-icon { color: var(--success-color); }
+        .conversation-card.voice .conversation-icon { color: var(--info-color); }
+        .conversation-card.image .conversation-icon { color: var(--warning-color); }
+        .conversation-card.video .conversation-icon { color: var(--danger-color); }
+        .conversation-card.config .conversation-icon { color: var(--secondary-color); }
+
+        .conversation-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+        .conversation-description {
+            color: var(--secondary-color);
+            margin-bottom: 1.5rem;
+            line-height: 1.5;
+        }
+        .conversation-button {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 6px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            text-decoration: none;
+            display: inline-block;
+        }
+        .conversation-button:hover {
+            background-color: #0056b3;
+            text-decoration: none;
+            color: white;
+        }
+        .dark-mode-toggle {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: var(--text-color);
+            z-index: 1000;
+        }
+        .status-indicator {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            font-size: 0.8rem;
+            padding: 0.25rem 0.5rem;
+            border-radius: 12px;
+            font-weight: 600;
+        }
+        .status-indicator.active {
+            background-color: var(--success-color);
+            color: white;
+        }
+        .status-indicator.inactive {
+            background-color: var(--secondary-color);
+            color: white;
+        }
+        @media (max-width: 768px) {
+            .conversation-types {
+                grid-template-columns: 1fr;
+            }
+            .header h1 {
+                font-size: 2rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <button class="dark-mode-toggle" onclick="toggleDarkMode()" title="Переключить тему">
+        <i class="fas fa-moon"></i>
+    </button>
+
+    <div class="container">
+        <div class="header">
+            <h1><i class="fas fa-robot"></i> NeuroCrew Lab</h1>
+            <p>Выберите тип консультации для общения с AI-ассистентами</p>
+        </div>
+
+        <div class="conversation-types">
+            <!-- File Conversation -->
+            <div class="conversation-card file" onclick="openConversation('file')">
+                <span class="status-indicator active">Активен</span>
+                <i class="fas fa-file-alt conversation-icon"></i>
+                <h2 class="conversation-title">Файлы</h2>
+                <p class="conversation-description">
+                    Загружайте и анализируйте документы, текстовые файлы и PDF.
+                    Идеально для работы с кодом и документацией.
+                </p>
+                <a href="/chat/file" class="conversation-button">
+                    <i class="fas fa-comments"></i> Открыть чат
+                </a>
+            </div>
+
+            <!-- Voice Conversation -->
+            <div class="conversation-card voice" onclick="openConversation('voice')">
+                <span class="status-indicator inactive">Недоступен</span>
+                <i class="fas fa-microphone conversation-icon"></i>
+                <h2 class="conversation-title">Голос</h2>
+                <p class="conversation-description">
+                    Общайтесь с помощью голосовых сообщений.
+                    Преобразование речи в текст и обратно.
+                </p>
+                <a href="/chat/voice" class="conversation-button" onclick="event.stopPropagation(); return false;">
+                    <i class="fas fa-comments"></i> Скоро
+                </a>
+            </div>
+
+            <!-- Image Conversation -->
+            <div class="conversation-card image" onclick="openConversation('image')">
+                <span class="status-indicator inactive">Недоступен</span>
+                <i class="fas fa-image conversation-icon"></i>
+                <h2 class="conversation-title">Изображения</h2>
+                <p class="conversation-description">
+                    Загружайте изображения для анализа и обработки.
+                    Распознавание объектов и текста на картинках.
+                </p>
+                <a href="/chat/image" class="conversation-button" onclick="event.stopPropagation(); return false;">
+                    <i class="fas fa-comments"></i> Скоро
+                </a>
+            </div>
+
+            <!-- Video Conversation -->
+            <div class="conversation-card video" onclick="openConversation('video')">
+                <span class="status-indicator inactive">Недоступен</span>
+                <i class="fas fa-video conversation-icon"></i>
+                <h2 class="conversation-title">Видео</h2>
+                <p class="conversation-description">
+                    Анализ видеофайлов и извлечение информации.
+                    Обработка видео контента с помощью AI.
+                </p>
+                <a href="/chat/video" class="conversation-button" onclick="event.stopPropagation(); return false;">
+                    <i class="fas fa-comments"></i> Скоро
+                </a>
+            </div>
+        </div>
+
+        <div style="text-align: center; margin-top: 2rem;">
+            <a href="/settings" class="conversation-button" style="background-color: var(--secondary-color);">
+                <i class="fas fa-cog"></i> Настройки системы
+            </a>
+        </div>
+    </div>
+
+    <script>
+        // Dark mode toggle
+        function toggleDarkMode() {
+            const body = document.body;
+            const icon = document.querySelector('.dark-mode-toggle i');
+
+            if (body.classList.contains('dark-mode')) {
+                body.classList.remove('dark-mode');
+                icon.className = 'fas fa-moon';
+                localStorage.setItem('darkMode', 'false');
+            } else {
+                body.classList.add('dark-mode');
+                icon.className = 'fas fa-sun';
+                localStorage.setItem('darkMode', 'true');
+            }
+        }
+
+        // Load dark mode preference
+        if (localStorage.getItem('darkMode') === 'true') {
+            document.body.classList.add('dark-mode');
+            document.querySelector('.dark-mode-toggle i').className = 'fas fa-sun';
+        }
+
+        // Open conversation
+        function openConversation(type) {
+            const card = document.querySelector(`.conversation-card.${type}`);
+            const statusIndicator = card.querySelector('.status-indicator');
+
+            if (statusIndicator.classList.contains('inactive')) {
+                // Show coming soon message
+                alert('Этот тип консультации пока недоступен. Следите за обновлениями!');
+                return;
+            }
+
+            // Navigate to the specific conversation type
+            window.location.href = `/chat/${type}`;
+        }
+
+        // Add keyboard navigation
+        document.addEventListener('keydown', (e) => {
+            if (e.key >= '1' && e.key <= '4') {
+                const cards = document.querySelectorAll('.conversation-card');
+                const index = parseInt(e.key) - 1;
+                if (cards[index]) {
+                    cards[index].click();
+                }
+            }
+        });
+    </script>
+</body>
+</html>

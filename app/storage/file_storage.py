@@ -16,6 +16,12 @@ import os
 
 from app.config import Config
 from app.utils.logger import get_logger
+from app.utils.errors import (
+    StorageError,
+    ValidationError,
+    handle_errors,
+    safe_execute
+)
 
 
 class FileStorage:
@@ -40,16 +46,17 @@ class FileStorage:
         # Ensure directories exist
         self._ensure_directories()
 
+    @handle_errors(
+        logger=None,  # будет использоваться self.logger
+        context="directories_creation",
+        return_on_error=None
+    )
     def _ensure_directories(self) -> None:
         """Ensure all required directories exist."""
-        try:
-            self.data_dir.mkdir(parents=True, exist_ok=True)
-            self.conversations_dir.mkdir(exist_ok=True)
-            self.logs_dir.mkdir(exist_ok=True)
-            self.logger.debug(f"Storage directories ensured: {self.data_dir}")
-        except Exception as e:
-            self.logger.error(f"Failed to create storage directories: {e}")
-            raise
+        self.data_dir.mkdir(parents=True, exist_ok=True)
+        self.conversations_dir.mkdir(exist_ok=True)
+        self.logs_dir.mkdir(exist_ok=True)
+        self.logger.debug(f"Storage directories ensured: {self.data_dir}")
 
     def _get_conversation_file(self, chat_id: int) -> Path:
         """
@@ -76,6 +83,11 @@ class FileStorage:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         return self.conversations_dir / f'chat_{chat_id}_backup_{timestamp}.json'
 
+    @handle_errors(
+        logger=None,  # будет использоваться self.logger
+        context="conversation_loading",
+        return_on_error=[]
+    )
     async def load_conversation(self, chat_id: int) -> List[Dict]:
         """
         Load conversation history from file.
@@ -122,10 +134,12 @@ class FileStorage:
             # Try to create backup before starting fresh
             await self._backup_corrupted_file(file_path, chat_id)
             return []
-        except Exception as e:
-            self.logger.error(f"Error loading conversation for chat {chat_id}: {e}")
-            return []
 
+    @handle_errors(
+        logger=None,  # будет использоваться self.logger
+        context="conversation_saving",
+        return_on_error=False
+    )
     async def save_conversation(self, chat_id: int, conversation: List[Dict]) -> bool:
         """
         Save conversation history to file.
@@ -139,45 +153,40 @@ class FileStorage:
         """
         file_path = self._get_conversation_file(chat_id)
 
-        try:
-            # Validate conversation structure
-            if not isinstance(conversation, list):
-                raise ValueError("Conversation must be a list")
+        # Validate conversation structure
+        if not isinstance(conversation, list):
+            raise ValidationError("Conversation must be a list", field_name="conversation", value=type(conversation))
 
-            # Limit conversation length if configured
-            if len(conversation) > Config.MAX_CONVERSATION_LENGTH:
-                conversation = conversation[-Config.MAX_CONVERSATION_LENGTH:]
-                self.logger.debug(f"Truncated conversation for chat {chat_id} to {Config.MAX_CONVERSATION_LENGTH} messages")
+        # Limit conversation length if configured
+        if len(conversation) > Config.MAX_CONVERSATION_LENGTH:
+            conversation = conversation[-Config.MAX_CONVERSATION_LENGTH:]
+            self.logger.debug(f"Truncated conversation for chat {chat_id} to {Config.MAX_CONVERSATION_LENGTH} messages")
 
-            # Add metadata
-            metadata = {
-                'chat_id': chat_id,
-                'message_count': len(conversation),
-                'last_updated': datetime.now().isoformat(),
-                'version': '1.0'
-            }
+        # Add metadata
+        metadata = {
+            'chat_id': chat_id,
+            'message_count': len(conversation),
+            'last_updated': datetime.now().isoformat(),
+            'version': '1.0'
+        }
 
-            # Prepare file content with metadata
-            file_content = {
-                'metadata': metadata,
-                'conversation': conversation
-            }
+        # Prepare file content with metadata
+        file_content = {
+            'metadata': metadata,
+            'conversation': conversation
+        }
 
-            # Write to temporary file first (atomic operation)
-            temp_file = file_path.with_suffix('.tmp')
-            async with aiofiles.open(temp_file, 'w', encoding='utf-8') as f:
-                json_content = json.dumps(file_content, ensure_ascii=False, indent=2)
-                await f.write(json_content)
+        # Write to temporary file first (atomic operation)
+        temp_file = file_path.with_suffix('.tmp')
+        async with aiofiles.open(temp_file, 'w', encoding='utf-8') as f:
+            json_content = json.dumps(file_content, ensure_ascii=False, indent=2)
+            await f.write(json_content)
 
-            # Atomic rename
-            temp_file.rename(file_path)
+        # Atomic rename
+        temp_file.rename(file_path)
 
-            self.logger.debug(f"Saved {len(conversation)} messages for chat {chat_id}")
-            return True
-
-        except Exception as e:
-            self.logger.error(f"Error saving conversation for chat {chat_id}: {e}")
-            return False
+        self.logger.debug(f"Saved {len(conversation)} messages for chat {chat_id}")
+        return True
 
     async def add_message(self, chat_id: int, message: Dict) -> bool:
         """

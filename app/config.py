@@ -13,6 +13,7 @@ from dotenv import load_dotenv
 from dataclasses import dataclass, field, fields
 
 from app.connectors import get_connector_spec
+from app.utils.logger import get_logger
 
 # Load environment variables from .env file
 load_dotenv()
@@ -142,6 +143,9 @@ def create_role_from_dict(role_data: Dict[str, Any]) -> RoleConfig:
 class Config:
     """Configuration class for NeuroCrew Lab."""
 
+    # Logger instance
+    logger = get_logger("Config")
+
     # Главный токен для прослушивания
     MAIN_BOT_TOKEN: str = os.getenv("MAIN_BOT_TOKEN", "")
 
@@ -235,8 +239,8 @@ class Config:
     def _load_telegram_bot_tokens(cls):
         """Динамически загружает токены из переменных окружения на основе загруженных ролей."""
         if not cls.is_role_based_enabled():
-            print(
-                "Warning: Role-based configuration is not enabled, skipping token loading"
+            cls.logger.debug(
+                "Role-based configuration is not enabled, skipping token loading"
             )
             return
 
@@ -244,17 +248,18 @@ class Config:
         loaded_roles = cls.roles_registry.get_available_roles()
 
         if not loaded_roles:
-            print("Warning: No roles found for token loading")
+            cls.logger.debug("No roles found for token loading")
             cls.TELEGRAM_BOT_TOKENS = token_dict
             return
 
-        print(f"Loading tokens for {len(loaded_roles)} roles...")
+        cls.logger.debug(f"Loading tokens for {len(loaded_roles)} roles...")
 
+        loaded_count = 0
         for role in loaded_roles:
             # Проверяем, что у роли есть имя бота
             if not hasattr(role, "telegram_bot_name") or not role.telegram_bot_name:
-                print(
-                    f"Warning: Role '{role.role_name}' has no telegram_bot_name, skipping"
+                cls.logger.debug(
+                    f"Role '{role.role_name}' has no telegram_bot_name, skipping"
                 )
                 continue
 
@@ -266,17 +271,15 @@ class Config:
 
             if token:
                 token_dict[role.telegram_bot_name] = token
-                masked_token = token[:4] + "..." if len(token) > 4 else token
-                print(
-                    f"✓ Loaded token for {role.telegram_bot_name} ({var_name}): {masked_token}"
-                )
+                loaded_count += 1
+                cls.logger.debug(f"Token loaded for {role.telegram_bot_name}")
             else:
-                print(f"⚠ Token not found for {role.telegram_bot_name} ({var_name})")
+                cls.logger.warning(f"Token not found for {role.telegram_bot_name} ({var_name})")
 
         cls.TELEGRAM_BOT_TOKENS = token_dict
 
-        print(
-            f"Token loading completed: {len(cls.TELEGRAM_BOT_TOKENS)}/{len(loaded_roles)} tokens loaded"
+        cls.logger.info(
+            f"Token loading completed: {loaded_count}/{len(loaded_roles)} tokens loaded"
         )
 
     @classmethod
@@ -309,7 +312,7 @@ class Config:
                     role = create_role_from_dict(role_data)
                     cls.roles_registry.add_role(role)
                 except Exception as e:
-                    print(
+                    cls.logger.error(
                         f"Error loading role {role_data.get('role_name', 'unknown')}: {e}"
                     )
                     continue
@@ -318,7 +321,7 @@ class Config:
             return True
 
         except Exception as e:
-            print(f"Error loading role configuration: {e}")
+            cls.logger.error(f"Error loading role configuration: {e}")
             return False
 
     @classmethod

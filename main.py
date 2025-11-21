@@ -114,7 +114,7 @@ def main():
 
 import os
 import threading
-from app.interfaces.web_server import run_web_server
+from app.interfaces.web_server import run_web_server, app
 
 
 async def async_main():
@@ -122,10 +122,54 @@ async def async_main():
     # Import and create bot instance
     from app.interfaces.telegram_bot import TelegramBot
 
-    # Start web server in a separate thread
-    web_thread = threading.Thread(target=run_web_server, daemon=True)
+    # Start web server in a separate thread with better error handling
+    def start_web_server():
+        """Start web server with retry logic and better error reporting."""
+        import time
+        import sys
+
+        retries = 3
+        port = 8080
+
+        while retries > 0:
+            try:
+                logger.info(f"🌐 Attempting to start web server on port {port}...")
+                app.run(host="0.0.0.0", port=port, use_reloader=False, debug=False)
+                logger.info("✅ Web server stopped successfully")
+                break
+            except OSError as e:
+                if "Address already in use" in str(e):
+                    logger.warning(f"⚠️ Port {port} is busy, checking if process is ours...")
+                    # Check if our process is already using the port
+                    try:
+                        import socket
+                        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                        result = sock.connect_ex(('localhost', port))
+                        sock.close()
+                        if result == 0:
+                            logger.info("🔄 Port is in use by our process")
+                            break
+                    except:
+                        pass
+
+                    if retries > 1:
+                        logger.warning(f"🔄 Retrying in 2 seconds... ({retries-1} retries left)")
+                        time.sleep(2.0)
+                        retries -= 1
+                        port += 1  # Try next port
+                    else:
+                        logger.error(f"❌ Failed to start web server after 3 attempts")
+                        break
+                else:
+                    logger.error(f"❌ Error starting web server: {e}")
+                    break
+            except Exception as e:
+                logger.error(f"❌ Unexpected error in web server: {e}")
+                break
+
+    web_thread = threading.Thread(target=start_web_server, name="web_server", daemon=True)
     web_thread.start()
-    logger.info("🚀 Web server started in a background thread")
+    logger.info(f"🚀 Web server thread started, listening on port 8080")
 
     # Create global bot reference for signal handling
     global bot_instance

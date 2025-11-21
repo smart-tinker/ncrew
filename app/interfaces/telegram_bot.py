@@ -21,6 +21,12 @@ from telegram.ext import CallbackQueryHandler
 from app.config import Config, RoleConfig
 from app.core.engine import NeuroCrewLab
 from app.utils.logger import setup_logger
+from app.utils.errors import (
+    TelegramError,
+    ConfigurationError,
+    handle_errors,
+    safe_execute
+)
 from app.utils.formatters import (
     format_welcome_message,
     format_help_message,
@@ -44,27 +50,48 @@ class TelegramBot:
         self.logger = setup_logger(f"{self.__class__.__name__}", Config.LOG_LEVEL)
         self.ncrew = None  # Will be initialized asynchronously
 
-        try:
-            # Initialize application with main listener bot token
-            bot_token = Config.MAIN_BOT_TOKEN
+        # Initialize application with main listener bot token
+        bot_token = safe_execute(
+            lambda: Config.MAIN_BOT_TOKEN,
+            logger=self.logger,
+            context="telegram_initialization",
+            error_message="❌ Не удалось получить токен Telegram бота"
+        )
 
-            # Create application directly using system settings
-            self.application = Application.builder().token(bot_token).build()
+        if not bot_token:
+            raise ConfigurationError("MAIN_BOT_TOKEN not configured")
 
-            self.logger.info(
-                "Telegram application created successfully with main listener bot"
-            )
+        # Create application directly using system settings
+        self.application = safe_execute(
+            lambda: Application.builder().token(bot_token).build(),
+            logger=self.logger,
+            context="telegram_application_creation",
+            error_message="❌ Не удалось создать Telegram приложение"
+        )
 
-            # Set up handlers
-            self._setup_handlers()
-            self.application.post_shutdown = self._handle_application_shutdown
+        if not self.application:
+            raise ConfigurationError("Failed to create Telegram application")
 
-            self.logger.info("Telegram bot initialized successfully")
+        self.logger.info(
+            "Telegram application created successfully with main listener bot"
+        )
 
-        except Exception as e:
-            self.logger.error(f"Failed to initialize Telegram bot: {e}")
-            raise
+        # Set up handlers
+        safe_execute(
+            lambda: self._setup_handlers(),
+            logger=self.logger,
+            context="telegram_handlers_setup",
+            error_message="❌ Не удалось настроить обработчики Telegram"
+        )
 
+        self.application.post_shutdown = self._handle_application_shutdown
+        self.logger.info("Telegram bot initialized successfully")
+
+    @handle_errors(
+        logger=None,  # будет использоваться self.logger
+        context="ncrew_initialization",
+        return_on_error=None
+    )
     async def _ensure_ncrew_initialized(self):
         """Ensure NeuroCrew Lab is initialized."""
         if self.ncrew is None:
@@ -75,36 +102,34 @@ class TelegramBot:
 
     async def run_startup_introductions(self):
         """Triggers the agent introduction sequence at startup."""
-        self.logger.info("DEBUG: Entered run_startup_introductions")
+        self.logger.debug("Starting agent introduction sequence")
         await self._ensure_ncrew_initialized()
-        self.logger.info("DEBUG: Ncrew initialized")
 
         if Config.TARGET_CHAT_ID:
-            self.logger.info(
-                f"DEBUG: Sending startup message to {Config.TARGET_CHAT_ID}"
-            )
+            self.logger.debug(f"Sending startup message to {Config.TARGET_CHAT_ID}")
             try:
-                startup_msg = "🚀 **NeuroCrew Lab запускается...**\nСбор команды и инициализация агентов."
+                # Avoid bold/ellipsis to keep MarkdownV2 parsing simple
+                startup_msg = (
+                    "🚀 NeuroCrew Lab запускается — сбор команды и инициализация агентов."
+                )
                 formatted_startup = format_telegram_message(startup_msg)
                 await self.application.bot.send_message(
                     chat_id=Config.TARGET_CHAT_ID,
                     text=formatted_startup,
                     parse_mode="MarkdownV2",
                 )
-                self.logger.info("DEBUG: Startup message sent")
+                self.logger.debug("Startup message sent")
             except Exception as e:
-                self.logger.error(f"DEBUG: Failed to send startup message: {e}")
+                self.logger.error(f"Failed to send startup message: {e}")
 
         try:
-            self.logger.info("DEBUG: Starting streaming introductions loop")
+            self.logger.debug("Starting streaming introductions loop")
             # Iterate over the async generator to stream introductions
             async for (
                 role_config,
                 intro_text,
             ) in self.ncrew.perform_startup_introductions():
-                self.logger.info(
-                    f"DEBUG: Got introduction from {role_config.role_name}"
-                )
+                self.logger.debug(f"Got introduction from {role_config.role_name}")
 
                 # Send "typing" action while processing
                 if Config.TARGET_CHAT_ID:
@@ -113,7 +138,7 @@ class TelegramBot:
                             chat_id=Config.TARGET_CHAT_ID, action="typing"
                         )
                     except Exception as e:
-                        self.logger.warning(f"DEBUG: Failed to send typing action: {e}")
+                        self.logger.debug(f"Failed to send typing action: {e}")
 
                 # Escape introduction text
                 safe_intro = format_telegram_message(intro_text)
@@ -124,7 +149,7 @@ class TelegramBot:
                     formatted_intro, max_length=Config.TELEGRAM_MAX_MESSAGE_LENGTH
                 )
 
-                self.logger.info(f"DEBUG: Sending intro for {role_config.role_name}")
+                self.logger.debug(f"Sending intro for {role_config.role_name}")
                 sent_via_actor = await self._send_role_messages_via_actor(
                     role_config, messages_to_send
                 )
@@ -140,7 +165,7 @@ class TelegramBot:
                             text=chunk,
                             parse_mode="MarkdownV2",
                         )
-                self.logger.info(f"DEBUG: Intro sent for {role_config.role_name}")
+                self.logger.debug(f"Intro sent for {role_config.role_name}")
 
                 await asyncio.sleep(1.0)  # Short pause between agents
 
@@ -148,11 +173,11 @@ class TelegramBot:
             self.logger.error(f"Failed during startup introductions: {intro_error}")
             return
 
-        self.logger.info("DEBUG: Introductions loop finished")
+        self.logger.debug("Introductions loop finished")
 
         if Config.TARGET_CHAT_ID:
             try:
-                ready_msg = "💬 **Команда в сборе и готова к работе.** Жду ваших указаний."
+                ready_msg = "💬 Команда в сборе и готова к работе. Жду ваших указаний."
                 formatted_ready = format_telegram_message(ready_msg)
                 await self.application.bot.send_message(
                     chat_id=Config.TARGET_CHAT_ID,
@@ -577,6 +602,12 @@ class TelegramBot:
                             formatted_response,
                             max_length=Config.TELEGRAM_MAX_MESSAGE_LENGTH,
                         )
+
+                        # 🔍 ОТЛАДОЧНОЕ ЛОГИРОВАНИЕ
+                        self.logger.info(f"🔄 Processing role: {role_config.role_name}")
+                        self.logger.info(f"📝 Raw response length: {len(raw_response)} chars")
+                        self.logger.info(f"📨 Messages to send: {len(messages_to_send)}")
+                        self.logger.info(f"📦 First message preview: {messages_to_send[0][:100] if messages_to_send else 'No messages'}")
 
                         sent_via_actor = await self._send_role_messages_via_actor(
                             role_config, messages_to_send
