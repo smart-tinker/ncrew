@@ -36,7 +36,7 @@ class _SessionInfo:
 class QwenACPConnector(BaseConnector):
     """Connector that implements the Qwen ACP 0.1.4 protocol."""
 
-    DEFAULT_COMMAND = "qwen --experimental-acp"
+    DEFAULT_COMMAND = "qwen --model qwen3-coder-plus-2025-09-23 --experimental-acp"
     AUTH_METHOD_QWEN = "qwen-oauth"
     STREAM_READER_LIMIT = 2 * 1024 * 1024
 

@@ -309,12 +309,22 @@ class DialogueOrchestrator:
 
         # Check if we need system reminder
         if self.session_manager.should_add_system_reminder(chat_id, role.role_name):
-            # Add system reminder
+            # Add system reminder with team work instruction
             # Use [SYSTEM REMINDER] instead of --- to avoid CLI flag parsing issues
-            system_reminder = (
-                f"\n\n[SYSTEM REMINDER]\n{role.system_prompt}\n[END REMINDER]\n\n"
+            team_instruction = (
+                f"\n[TEAM WORK INSTRUCTION]\n"
+                f"ВАЖНО: Вы работаете в команде других AI-специалистов.\n"
+                f"Ваша роль: {role.display_name} ({role.role_name})\n"
+                f"Отвечайте ТОЛЬКО за свою область экспертизы\n"
+                f"Сообщения от других участников команды - это контекст для вашей работы\n"
+                f"НЕ отвечайте за других агентов, даже если они молчат\n"
+                f"Если нет содержательного дополнения - используйте \".....\"\n"
+                f"[END TEAM INSTRUCTION]\n\n"
             )
-            conversation_context = system_reminder + conversation_context
+            system_reminder = (
+                f"[SYSTEM REMINDER]\n{role.system_prompt}\n[END REMINDER]\n\n"
+            )
+            conversation_context = system_reminder + team_instruction + conversation_context
 
         prompt = conversation_context
         return prompt, True

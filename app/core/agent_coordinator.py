@@ -41,6 +41,9 @@ class AgentCoordinator:
         self.logger = get_logger(f"{self.__class__.__name__}")
         self.roles: List[RoleConfig] = []
         self.is_role_based = Config.is_role_based_enabled()
+        # Failure tracking for agent availability (MVP feature)
+        self.agent_failures: Dict[str, int] = {}  # role_name -> failure_count
+        self.MAX_FAILURES = 3  # Mark agent as unavailable after 3 failures
 
     def validate_and_initialize_roles(self) -> List[RoleConfig]:
         """
@@ -318,13 +321,40 @@ class AgentCoordinator:
 
         Returns:
             BaseConnector: Connector instance
+
+        Raises:
+            RuntimeError: If agent is marked as unavailable due to repeated failures
         """
+        # Check if agent is marked as unavailable (MVP feature)
+        if self.agent_failures.get(role.role_name, 0) >= self.MAX_FAILURES:
+            self.logger.warning(
+                f"Agent {role.role_name} marked as unavailable (3+ failures). "
+                f"Will retry after successful connection attempts from other agents."
+            )
+            raise RuntimeError(f"Agent {role.role_name} is temporarily unavailable")
+
         def connector_factory():
             return self.create_connector_for_role(role)
 
-        return await self.port_manager.get_or_create_connection(
-            chat_id, role.role_name, connector_factory
-        )
+        try:
+            connector = await self.port_manager.get_or_create_connection(
+                chat_id, role.role_name, connector_factory
+            )
+            # Reset failure count on successful connection
+            if role.role_name in self.agent_failures:
+                self.logger.info(
+                    f"Agent {role.role_name} connection successful, "
+                    f"resetting failure count from {self.agent_failures[role.role_name]}"
+                )
+                self.agent_failures[role.role_name] = 0
+            return connector
+        except Exception as e:
+            # Increment failure count
+            self.agent_failures[role.role_name] = self.agent_failures.get(role.role_name, 0) + 1
+            self.logger.error(
+                f"Agent {role.role_name} connection failure #{self.agent_failures[role.role_name]}: {e}"
+            )
+            raise
 
     async def get_agent_status(self) -> Dict[str, bool]:
         """
@@ -347,6 +377,34 @@ class AgentCoordinator:
 
         self.logger.debug(f"Role status: {status}")
         return status
+
+    def reset_agent_failures(self, role_name: Optional[str] = None):
+        """
+        Reset failure count for a specific agent or all agents (MVP feature).
+
+        Args:
+            role_name: Specific role name to reset, or None to reset all
+        """
+        if role_name:
+            if role_name in self.agent_failures:
+                old_count = self.agent_failures[role_name]
+                self.agent_failures[role_name] = 0
+                self.logger.info(f"Reset failure count for {role_name}: {old_count} -> 0")
+        else:
+            # Reset all failure counts
+            if self.agent_failures:
+                total_reset = len(self.agent_failures)
+                self.agent_failures.clear()
+                self.logger.info(f"Reset failure counts for {total_reset} agents")
+
+    def get_agent_failures(self) -> Dict[str, int]:
+        """
+        Get current failure counts for all agents (MVP feature).
+
+        Returns:
+            Dict[str, int]: Role name -> failure count
+        """
+        return self.agent_failures.copy()
 
     def get_agent_info(self, agent_name: str) -> Optional[Dict[str, str]]:
         """

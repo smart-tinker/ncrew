@@ -3,16 +3,16 @@ roles:
   display_name: "Software Developer"
   telegram_bot_name: Software_Dev_Bot
   system_prompt_file: roles/prompts/software_developer.md
-  agent_type: claude_cli
-  cli_command: "glm -p --output-format text --dangerously-skip-permissions --permission-mode bypassPermissions"
+  agent_type: gemini_acp
+  cli_command: "gemini --model gemini-2.5-flash --experimental-acp --approval-mode default"
   description: "Старший разработчик"
   is_moderator: false
 - role_name: code_review
   display_name: "Code Review"
   telegram_bot_name: Code_Review_Bot
   system_prompt_file: roles/prompts/code_review.md
-  agent_type: codex_cli
-  cli_command: "codex exec --json --full-auto --skip-git-repo-check --sandbox workspace-write"
+  agent_type: opencode_acp
+  cli_command: "opencode acp"
   description: "Старший специалист по код-ревью, фокус на качестве и безопасности"
   is_moderator: false
 - role_name: product_owner
@@ -27,8 +27,8 @@ roles:
   display_name: "Senior Architect"
   telegram_bot_name: Senior_Architect_Bot
   system_prompt_file: roles/prompts/senior_architect.md
-  agent_type: codex_cli
-  cli_command: "codex exec --json --full-auto --skip-git-repo-check --sandbox workspace-write"
+  agent_type: qwen_acp
+  cli_command: "qwen --model qwen3-coder-plus-2025-09-23 --experimental-acp --approval-mode default"
   description: "Senior Architect, проектирует современные программные решения"
   is_moderator: false
 - role_name: product_analyst
@@ -68,8 +68,9 @@ roles:
   display_name: "Scrum Master"
   telegram_bot_name: Scrum_Master_Bot
   system_prompt_file: roles/prompts/scrum_master.md
-  agent_type: codex_cli
-  cli_command: "codex exec --json --full-auto --skip-git-repo-check --sandbox workspace-write"
+  agent_type: claude_cli
+  cli_command: "glm -p --output-format stream-json --verbose --dangerously-skip-permissions\
+    \ --permission-mode bypassPermissions"
   description: "Scrum Master, обеспечивает Agile методологии"
   is_moderator: true
 - role_name: system_analyst

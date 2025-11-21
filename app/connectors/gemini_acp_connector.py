@@ -36,7 +36,7 @@ class _SessionInfo:
 class GeminiACPConnector(BaseConnector):
     """Connector that implements the Gemini ACP experimental protocol."""
 
-    DEFAULT_COMMAND = "gemini --experimental-acp"
+    DEFAULT_COMMAND = "gemini --model gemini-2.5-flash --experimental-acp"
     AUTH_METHOD_GEMINI = "gemini-api-key"
     STREAM_READER_LIMIT = 2 * 1024 * 1024
 
