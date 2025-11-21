@@ -523,11 +523,24 @@ class NeuroCrewLab:
             key = (chat_id, role.role_name)
             last_seen_index = self.role_last_seen_index.get(key, 0)
 
-            # Safety check: if index is out of bounds, reset to reasonable default (last few messages)
+            # Safety check: if index is out of bounds, reset to 0 (start fresh for this role)
+            # This handles process restart or corrupted state
             if last_seen_index < 0 or last_seen_index > len(conversation):
-                last_seen_index = max(len(conversation) - 6, 0)
+                self.logger.warning(
+                    f"Role {role.role_name}: invalid last_seen_index {last_seen_index}, "
+                    f"conversation size={len(conversation)}, resetting to 0"
+                )
+                last_seen_index = 0
 
             new_messages = conversation[last_seen_index:]
+            
+            # Log delta tracking for debugging
+            self.logger.debug(
+                f"Role {role.role_name} (chat {chat_id}): delta tracking - "
+                f"last_seen_index={last_seen_index}, conversation_size={len(conversation)}, "
+                f"new_messages_count={len(new_messages)}"
+            )
+            
             role_prompt, has_updates = self._format_conversation_for_role(
                 new_messages, role, chat_id
             )
@@ -603,12 +616,18 @@ class NeuroCrewLab:
             }
 
             success = await self.storage.add_message(chat_id, agent_message)
-            if not success:
-                self.logger.warning("Failed to save agent response")
-                self.role_last_seen_index[key] = len(conversation)
-            else:
-                # Update last seen index for this role to the end of conversation (including new message)
-                self.role_last_seen_index[key] = len(conversation) + 1
+            if success:
+                # Update last seen index for this role to current conversation length
+                # After adding the agent's response, conversation is now longer
+                # Next time this role runs, it should see messages AFTER this one
+                new_conversation = await self.storage.load_conversation(chat_id)
+                new_last_seen_index = len(new_conversation)
+                self.role_last_seen_index[key] = new_last_seen_index
+                
+                self.logger.debug(
+                    f"Role {role.role_name}: updated last_seen_index to {new_last_seen_index} "
+                    f"after adding response (conversation now has {len(new_conversation)} messages)"
+                )
 
                 # Update response count for system reminder tracking
                 if response != ".....":  # Don't count placeholder responses
@@ -616,6 +635,8 @@ class NeuroCrewLab:
                     self.role_response_count[role_key] = (
                         self.role_response_count.get(role_key, 0) + 1
                     )
+            else:
+                self.logger.warning(f"Failed to save agent response for role {role.role_name}, keeping last_seen_index unchanged")
 
             return response
 
@@ -640,6 +661,9 @@ class NeuroCrewLab:
             Tuple[str, bool]: (prompt text, has_meaningful_updates)
         """
         if not new_messages:
+            self.logger.debug(
+                f"Role {role.role_name} (chat {chat_id}): no new messages, returning placeholder"
+            )
             return ".....", False
 
         # Filter out placeholder responses
@@ -651,7 +675,16 @@ class NeuroCrewLab:
             filtered_messages.append(msg)
 
         if not filtered_messages:
+            self.logger.debug(
+                f"Role {role.role_name} (chat {chat_id}): all {len(new_messages)} new messages were placeholders, returning placeholder"
+            )
             return ".....", False
+        
+        # Log filtered messages for debugging
+        self.logger.debug(
+            f"Role {role.role_name} (chat {chat_id}): "
+            f"filtered {len(new_messages)} new messages down to {len(filtered_messages)} meaningful messages"
+        )
 
         # Build conversation context from all new messages
         context_lines: List[str] = []
@@ -700,11 +733,8 @@ class NeuroCrewLab:
         if not connector_keys and not index_keys:
             return
 
-        self.logger.debug(
-            "Resetting %d role sessions and %d indices for chat %s",
-            len(connector_keys),
-            len(index_keys),
-            chat_id,
+        self.logger.info(
+            f"Resetting {len(connector_keys)} role sessions and {len(index_keys)} delta indices for chat {chat_id}"
         )
 
         for key in connector_keys:
@@ -713,13 +743,17 @@ class NeuroCrewLab:
                 continue
             try:
                 await connector.shutdown()
+                self.logger.debug(f"Shut down connector for role {key[1]} in chat {chat_id}")
             except Exception as e:
                 self.logger.warning(
                     f"Error shutting down connector for chat {chat_id}, role {key[1]}: {e}"
                 )
 
         for key in index_keys:
-            self.role_last_seen_index.pop(key, None)
+            old_index = self.role_last_seen_index.pop(key, None)
+            self.logger.debug(
+                f"Reset delta index for role {key[1]} in chat {chat_id} (was {old_index})"
+            )
 
     async def reset_conversation(self, chat_id: int) -> str:
         """
@@ -1147,8 +1181,8 @@ class NeuroCrewLab:
             await self.storage.clear_conversation(Config.TARGET_CHAT_ID)
             await self._reset_chat_role_sessions(Config.TARGET_CHAT_ID)
 
-        for role in self.roles:
-            self.logger.info(f"Introducing role: {role.role_name}...")
+        for i, role in enumerate(self.roles):
+            self.logger.info(f"Introducing role {i+1}/{len(self.roles)}: {role.role_name}...")
             connector = None
             introduction_text = (
                 f"Error: Could not get introduction from {role.display_name}."
@@ -1164,10 +1198,20 @@ class NeuroCrewLab:
                 await connector.launch(role.cli_command, role.system_prompt)
                 self.logger.info(f"Launched {role.role_name} for introduction.")
 
-                response = await connector.execute(introduction_prompt)
+                # Use shorter timeout for introductions (they should be quick)
+                original_timeout = getattr(connector, 'request_timeout', None)
+                if hasattr(connector, 'request_timeout'):
+                    connector.request_timeout = 60.0  # 1 minute for introductions
+
+                try:
+                    response = await connector.execute(introduction_prompt)
+                finally:
+                    # Restore original timeout
+                    if original_timeout is not None:
+                        connector.request_timeout = original_timeout
                 introduction_text = response.strip()
                 self.logger.info(
-                    f"Introduction from {role.role_name}: {introduction_text}"
+                    f"Introduction from {role.role_name}: {introduction_text[:100]}..."
                 )
 
             except Exception as e:
@@ -1199,6 +1243,11 @@ class NeuroCrewLab:
                 self.logger.info(
                     f"Session for {role.role_name} closed after introduction."
                 )
+
+                # Add delay between introductions to prevent system overload
+                if i < len(self.roles) - 1:  # Don't delay after the last agent
+                    await asyncio.sleep(3.0)  # 3 second delay between agents
+                    self.logger.debug(f"Waiting 3 seconds before next agent introduction...")
 
         self.logger.info("=== AGENT INTRODUCTION SEQUENCE COMPLETE ===")
 
