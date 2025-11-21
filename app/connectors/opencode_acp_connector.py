@@ -75,7 +75,7 @@ class OpenCodeACPConnector(BaseConnector):
         )
 
         # Verify process started successfully
-        await asyncio.sleep(0.1)  # Small delay to let process start
+        await asyncio.sleep(2.0)  # Give more time for opencode acp to initialize
         if not self.is_alive():
             raise RuntimeError(f"OpenCode ACP process failed to start: {args}")
 
@@ -205,6 +205,13 @@ class OpenCodeACPConnector(BaseConnector):
         if stop_reason:
             self.logger.debug("Prompt completed (stopReason=%s)", stop_reason)
 
+        # If no text was collected via notifications, try to extract from result
+        if not aggregated_text:
+            # OpenCode ACP returns the response directly in the result
+            content = result.get("content")
+            if content:
+                aggregated_text = self._extract_text(content)
+
         return aggregated_text
 
     async def _send_request(
@@ -288,7 +295,19 @@ class OpenCodeACPConnector(BaseConnector):
 
                 result = message.get("result", {})
                 aggregated_text = "".join(collected_chunks or [])
-                return result, aggregated_text
+
+                # For methods that return immediate results (like opencode ACP),
+                # return immediately after getting the response
+                if not collect_output or method != "session/prompt":
+                    return result, aggregated_text
+
+                # For session/prompt with collect_output, continue waiting for notifications
+                # until we get a stop_reason or timeout
+                if result.get("stopReason"):
+                    return result, aggregated_text
+
+                # Continue waiting for more notifications
+                continue
 
             if "method" in message and "id" not in message:
                 self._handle_notification(message, collected_chunks)
@@ -385,7 +404,7 @@ class OpenCodeACPConnector(BaseConnector):
 
         # Add read timeout to prevent hanging
         try:
-            raw = await asyncio.wait_for(self.process.stdout.readline(), timeout=10.0)
+            raw = await asyncio.wait_for(self.process.stdout.readline(), timeout=30.0)
         except asyncio.TimeoutError:
             self.logger.error("Timeout reading from OpenCode ACP process stdout")
             raise RuntimeError("OpenCode ACP process read timeout")
