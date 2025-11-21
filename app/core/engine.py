@@ -1147,8 +1147,8 @@ class NeuroCrewLab:
             await self.storage.clear_conversation(Config.TARGET_CHAT_ID)
             await self._reset_chat_role_sessions(Config.TARGET_CHAT_ID)
 
-        for role in self.roles:
-            self.logger.info(f"Introducing role: {role.role_name}...")
+        for i, role in enumerate(self.roles):
+            self.logger.info(f"Introducing role {i+1}/{len(self.roles)}: {role.role_name}...")
             connector = None
             introduction_text = (
                 f"Error: Could not get introduction from {role.display_name}."
@@ -1164,10 +1164,20 @@ class NeuroCrewLab:
                 await connector.launch(role.cli_command, role.system_prompt)
                 self.logger.info(f"Launched {role.role_name} for introduction.")
 
-                response = await connector.execute(introduction_prompt)
+                # Use shorter timeout for introductions (they should be quick)
+                original_timeout = getattr(connector, 'request_timeout', None)
+                if hasattr(connector, 'request_timeout'):
+                    connector.request_timeout = 60.0  # 1 minute for introductions
+
+                try:
+                    response = await connector.execute(introduction_prompt)
+                finally:
+                    # Restore original timeout
+                    if original_timeout is not None:
+                        connector.request_timeout = original_timeout
                 introduction_text = response.strip()
                 self.logger.info(
-                    f"Introduction from {role.role_name}: {introduction_text}"
+                    f"Introduction from {role.role_name}: {introduction_text[:100]}..."
                 )
 
             except Exception as e:
@@ -1199,6 +1209,11 @@ class NeuroCrewLab:
                 self.logger.info(
                     f"Session for {role.role_name} closed after introduction."
                 )
+
+                # Add delay between introductions to prevent system overload
+                if i < len(self.roles) - 1:  # Don't delay after the last agent
+                    await asyncio.sleep(3.0)  # 3 second delay between agents
+                    self.logger.debug(f"Waiting 3 seconds before next agent introduction...")
 
         self.logger.info("=== AGENT INTRODUCTION SEQUENCE COMPLETE ===")
 
