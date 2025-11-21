@@ -144,7 +144,7 @@ gemini --version
 
 - `MAIN_BOT_TOKEN`, `TARGET_CHAT_ID` — обязательные.  
 - `{TELEGRAM_BOT_NAME}_TOKEN` — автоматически подхватываются из `.env` на основе `roles/agents.yaml`.  
-- `MAX_CONVERSATION_LENGTH`, `AGENT_TIMEOUT`, `LOG_LEVEL`, `DATA_DIR` — общесистемные параметры.  
+- `MAX_CONVERSATION_LENGTH` (по умолчанию 200, регулирует длину истории), `AGENT_TIMEOUT`, `LOG_LEVEL`, `DATA_DIR` — общесистемные параметры.  
 - `GEMINI_MAX_TIMEOUTS`, `SYSTEM_REMINDER_INTERVAL` — настройки коннекторов.  
 - `WEB_ADMIN_USER`, `WEB_ADMIN_PASS` — логин/пароль для веб-панели.
 

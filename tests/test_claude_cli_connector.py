@@ -14,9 +14,10 @@ import sys
 parser = argparse.ArgumentParser()
 parser.add_argument("prompt")
 parser.add_argument("--session-id", dest="session_id")
+parser.add_argument("--resume", dest="resume_id")
 args = parser.parse_args()
 
-session_id = args.session_id or "mock-session"
+session_id = args.session_id or args.resume_id or "mock-session"
 
 print(json.dumps({"type": "system", "session_id": session_id}))
 print(json.dumps({
