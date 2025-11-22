@@ -186,9 +186,9 @@ async def test_delta_tracking_index_advances_after_response(ncrew_lab):
 
         await ncrew_lab._process_with_role(chat_id, dev_role)
 
-    # After processing, last_seen_index should be 2 (dev saw 1 message, 1 response added)
+    # After processing, last_seen_index should be 1 (dev saw 1 message, then processed)
     assert key in ncrew_lab.role_last_seen_index
-    assert ncrew_lab.role_last_seen_index[key] == 2
+    assert ncrew_lab.role_last_seen_index[key] == 1
 
 
 @pytest.mark.asyncio

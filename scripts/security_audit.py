@@ -92,7 +92,7 @@ class SecurityAuditor:
             r'(?i)(mongodb|mysql|postgresql|redis):\/\/[^:]+:[^@]+@[^\/]+',
             # Webhook URLs with secrets
             r'https?://[^/]+/[a-zA-Z0-9_-]{20,}',
-            # Bot tokens (Telegram, Discord, etc.)
+            # Bot tokens (Telegram)
             r'\d+:[a-zA-Z0-9_-]{35}'
         ]
 

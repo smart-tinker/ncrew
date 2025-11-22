@@ -189,12 +189,23 @@ class SessionManager:
         # Return new messages since the role's last response
         new_messages = conversation[last_seen_index:]
 
-        # Log delta tracking for debugging
-        self.logger.debug(
-            f"Role {role_name} (chat {chat_id}): delta tracking - "
-            f"context_index={last_seen_index}, conversation_size={len(conversation)}, "
-            f"new_messages_count={len(new_messages)}"
+        # Enhanced delta tracking logging for debugging
+        self.logger.info(
+            f"🔄 DELTA: {role_name} (chat {chat_id}) - "
+            f"index={last_seen_index}→{len(conversation)}, "
+            f"getting {len(new_messages)} new messages"
         )
+
+        # Log message previews for verification
+        if new_messages:
+            previews = []
+            for msg in new_messages[:3]:  # First 3 messages
+                role = msg.get('role', 'unknown')
+                content = msg.get('content', '')[:30]
+                previews.append(f"{role}:{content}...")
+            self.logger.info(f"🔄 DELTA: {role_name} preview: {' | '.join(previews)}")
+        elif last_seen_index < len(conversation):
+            self.logger.warning(f"🔄 DELTA: {role_name} got empty delta despite index difference!")
 
         return new_messages
 

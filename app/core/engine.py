@@ -631,17 +631,16 @@ class NeuroCrewLab:
         """
         response = await self.dialogue_orchestrator._process_with_role(chat_id, role)
 
-        # For test compatibility: emulate the index update that would happen in real session
-        # In real execution, session_manager.add_agent_message calls increment_context_index
-        # Tests that mock _process_with_role need this side effect to work correctly
-        try:
-            # Get current index and increment by 1 for the agent's response
-            current_index = self.memory_manager.get_context_index(chat_id, role.role_name)
-            self.memory_manager.increment_context_index(chat_id, role.role_name)
+        # Note: Context index management is now handled properly by SessionManager
+        # The dialogue_orchestrator._process_with_role() calls session_manager.add_agent_message()
+        # which handles increment_context_index automatically. No manual increment needed here.
 
-            # Also update the compatibility cache
+        # Update compatibility cache for legacy code that might still access it
+        try:
             if hasattr(self, '_role_last_seen_index_cache'):
-                self._role_last_seen_index_cache[(chat_id, role.role_name)] = current_index + 1
+                # Get current index for cache consistency (don't increment here)
+                current_index = self.memory_manager.get_context_index(chat_id, role.role_name)
+                self._role_last_seen_index_cache[(chat_id, role.role_name)] = current_index
         except Exception:
             # Ignore any errors in compatibility layer
             pass

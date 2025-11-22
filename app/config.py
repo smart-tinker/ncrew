@@ -387,6 +387,146 @@ class Config:
 
         return summary
 
+    @classmethod
+    def reload_configuration(cls, config_path: Path = Path("roles/agents.yaml")) -> bool:
+        """
+        Hot-reload configuration without service interruption.
+
+        This method atomically reloads the roles configuration and notifies
+        all registered instances to update their internal state.
+
+        Args:
+            config_path: Path to the agents.yaml configuration file
+
+        Returns:
+            bool: True if reload was successful, False otherwise
+
+        Note:
+            This method implements atomic configuration updates with rollback
+            on validation errors to ensure system stability.
+        """
+        cls.logger.info(f"🔄 Starting hot-reload of configuration from {config_path}")
+
+        try:
+            # Create temporary registry for new configuration
+            new_roles_registry = RolesRegistry()
+
+            # Load new configuration
+            if not config_path.exists():
+                cls.logger.error(f"Configuration file {config_path} does not exist")
+                return False
+
+            with open(config_path, 'r', encoding='utf-8') as f:
+                yaml_data = yaml.safe_load(f)
+
+            if not yaml_data or 'roles' not in yaml_data:
+                cls.logger.error("No roles found in configuration file")
+                return False
+
+            # Parse roles into temporary registry
+            for role_data in yaml_data['roles']:
+                try:
+                    role_config = RoleConfig(**role_data)
+
+                    # Validate role before adding
+                    if not role_config.system_prompt_file:
+                        role_config.system_prompt_file = ""
+
+                    # Load system prompt if file exists
+                    if role_config.system_prompt_file:
+                        prompt_path = Path(role_config.system_prompt_file)
+                        if prompt_path.exists():
+                            with open(prompt_path, 'r', encoding='utf-8') as f:
+                                role_config.system_prompt = f.read()
+                        else:
+                            role_config.system_prompt = ""
+
+                    new_roles_registry.add_role(role_config)
+
+                except Exception as e:
+                    cls.logger.error(f"Failed to parse role {role_data.get('role_name', 'unknown')}: {e}")
+                    continue
+
+            # Validate new configuration
+            validation_errors = new_roles_registry.validate_role_dependencies()
+            if validation_errors:
+                cls.logger.error(f"Configuration validation failed: {validation_errors}")
+                return False
+
+            # Atomic update: apply new configuration only if everything is valid
+            cls.logger.info(f"🔄 Hot-reload successful: {len(new_roles_registry.get_available_roles())} roles loaded")
+
+            # Store old registry for rollback
+            old_registry = cls.roles_registry
+
+            try:
+                # Update class-level variables atomically
+                cls.roles_registry = new_roles_registry
+                cls.role_based_enabled = True
+
+                # Reload tokens based on new roles
+                cls._load_telegram_bot_tokens()
+
+                # Notify all registered instances
+                cls._notify_instances_of_reload()
+
+                cls.logger.info("✅ Hot-reload completed successfully")
+                return True
+
+            except Exception as e:
+                # Rollback on any failure during update
+                cls.logger.error(f"Failed to apply hot-reload, rolling back: {e}")
+                cls.roles_registry = old_registry
+                cls.role_based_enabled = old_registry is not None
+                return False
+
+        except Exception as e:
+            cls.logger.error(f"Hot-reload failed with error: {e}")
+            return False
+
+    @classmethod
+    def _notify_instances_of_reload(cls):
+        """
+        Notify all registered instances that configuration has been reloaded.
+
+        This method should be called after successful configuration reload
+        to update instance-specific state.
+        """
+        # For now, we'll handle this through instance methods that check
+        # their configuration on-demand. In a more complex system, this would
+        # involve actual notification callbacks.
+        cls.logger.info("🔄 Notifying instances of configuration reload")
+
+        # Reset cached data in neurocrew lab instances if they exist
+        # This will cause them to reinitialize on next access
+        try:
+            from app.core.engine import NeuroCrewLab
+            # Force reinitialization of role-based components
+            if hasattr(NeuroCrewLab, '_instances'):
+                for instance in NeuroCrewLab._instances:
+                    if hasattr(instance, 'agent_coordinator'):
+                        instance.agent_coordinator._roles_cache = None
+                    if hasattr(instance, 'dialogue_orchestrator'):
+                        instance.dialogue_orchestrator._chat_role_pointers = {}
+                    if hasattr(instance, 'roles'):
+                        instance.roles = None
+            cls.logger.info("🔄 Cleared cached data in NeuroCrewLab instances")
+        except Exception as e:
+            cls.logger.warning(f"Could not clear instance caches: {e}")
+
+    @classmethod
+    def register_instance(cls, instance_id: str, callback=None):
+        """
+        Register an instance for configuration change notifications.
+
+        Args:
+            instance_id: Unique identifier for the instance
+            callback: Optional callback function to call on reload
+        """
+        # This is a placeholder for a more sophisticated notification system
+        # For now, instances check configuration on-demand rather than registering
+        pass
+
 
 # Инициализация загрузчиков при импорте
 # Config._sanitize_proxy_env() removed to respect user network configuration

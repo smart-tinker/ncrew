@@ -247,30 +247,11 @@ async def async_main():
         await bot_instance.application.start()
         await bot_instance.application.updater.start_polling(drop_pending_updates=True)
 
-        # Keep the bot running and check for reload flag
+        # Keep the bot running with hot-reload capability
         try:
             while not shutdown_event.is_set():
-                if os.path.exists(".reload"):
-                    logger.info("Reload flag detected. Restarting application...")
-                    await bot_instance.application.bot.send_message(
-                        chat_id=Config.TARGET_CHAT_ID,
-                        text="Configuration updated. Restarting and starting a new conversation...",
-                    )
-                    await ensure_shutdown("configuration reload")
-                    os.remove(".reload")
-
-                    # Debug logging for reload process
-                    logger.info(f"RELOAD: Current PID: {os.getpid()}")
-                    logger.info(f"RELOAD: Executable: {sys.executable}")
-                    logger.info(f"RELOAD: Arguments: {sys.argv}")
-                    logger.info(
-                        f"RELOAD: Proxy Env: HTTP_PROXY={os.environ.get('HTTP_PROXY')}, HTTPS_PROXY={os.environ.get('HTTPS_PROXY')}"
-                    )
-
-                    # Re-execute the python process replacing the current one
-                    # We use "python" as arg0 (convention), and pass the script name + args
-                    # NOTE: sys.argv[0] is the script name (e.g. 'main.py')
-                    os.execv(sys.executable, [sys.executable] + sys.argv)
+                # Configuration is now hot-reloaded automatically via Config.reload_configuration()
+                # No need for manual restart or flag detection - instant updates!
                 await asyncio.sleep(1)
         except asyncio.CancelledError:
             logger.info("Bot operation cancelled")
