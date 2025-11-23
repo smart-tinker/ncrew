@@ -374,7 +374,7 @@ class GeminiACPConnector(BaseConnector):
 
     async def _write_message(self, message: JsonDict, expect_response: bool = True):
         if not self.process or not self.process.stdin:
-            raise RuntimeError("Qwen ACP process stdin is not available.")
+            raise RuntimeError("Gemini ACP process stdin is not available.")
         await self._write_raw(json.dumps(message) + "\n")
         if expect_response:
             self.logger.debug("Message written: %s", message.get("method"))
