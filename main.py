@@ -114,13 +114,13 @@ def main():
 
 import os
 import threading
-from app.interfaces.web_server import run_web_server, app
+from app.interfaces.web.web_server import run_web_server, app
 
 
 async def async_main():
     """Async main function that handles the complete application lifecycle."""
     # Import and create bot instance
-    from app.interfaces.telegram_bot import TelegramBot
+    from app.interfaces.telegram.telegram_bot import TelegramBot
 
     # Start web server in a separate thread with better error handling
     def start_web_server():

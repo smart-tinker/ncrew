@@ -23,58 +23,39 @@ def mock_storage():
 @pytest.fixture
 def ncrew_lab(mock_storage):
     """Create NeuroCrew Lab instance with mocked config and connectors."""
-    # Patch background task managers to prevent hanging tests
-    with patch("app.core.memory_manager.MemoryManager.start", new_callable=AsyncMock), \
-         patch("app.core.port_manager.PortManager.start", new_callable=AsyncMock), \
-         patch("app.core.session_manager.SessionManager.initialize", new_callable=AsyncMock):
-        # Patch Config where it is used (ncrew module)
-        with patch("app.core.engine.Config") as mock_config:
-            mock_config.is_role_based_enabled.return_value = True
-            mock_config.SYSTEM_REMINDER_INTERVAL = 5
-            mock_config.get_role_sequence.return_value = [
-                RoleConfig(
-                    role_name="dev",
-                    display_name="Developer",
-                    telegram_bot_name="dev_bot",
-                    prompt_file="",
-                    agent_type="mock_agent",
-                    cli_command="echo",
-                    system_prompt="You are a developer",
-                ),
-                RoleConfig(
-                    role_name="reviewer",
-                    display_name="Reviewer",
-                    telegram_bot_name="reviewer_bot",
-                    prompt_file="",
-                    agent_type="mock_agent",
-                    cli_command="echo",
-                    system_prompt="You are a reviewer",
-                ),
-            ]
-            mock_config.TELEGRAM_BOT_TOKENS = {
-                "dev_bot": "token1",
-                "reviewer_bot": "token2",
-            }
-
-            # Also patch get_connector_spec in ncrew to avoid validation errors
-            with patch("app.core.agent_coordinator.get_connector_spec") as mock_spec:
-                mock_spec.return_value = MagicMock(requires_cli=False)
-
-                # Patch connector creation
-                with patch("app.core.agent_coordinator.get_connector_class") as mock_get_connector:
-                    MockConnector = MagicMock()
-                    mock_instance = MagicMock()
-                    mock_instance.check_availability.return_value = True
-                    mock_instance.is_alive.return_value = True
-                    mock_instance.launch = AsyncMock()
-                    mock_instance.execute = AsyncMock(return_value="Mock response")
-                    mock_instance.shutdown = AsyncMock()
-
-                    MockConnector.return_value = mock_instance
-                    mock_get_connector.return_value = MockConnector
-
-                    lab = NeuroCrewLab(storage=mock_storage)
-                    yield lab
+    with patch("app.core.agent_coordinator.AgentCoordinator.validate_and_initialize_roles") as mock_validate, \
+         patch("app.core.agent_coordinator.get_connector_class") as mock_get_connector:
+        mock_validate.return_value = [
+            RoleConfig(
+                role_name="dev",
+                display_name="Developer",
+                telegram_bot_name="dev_bot",
+                prompt_file="",
+                agent_type="mock_agent",
+                cli_command="echo",
+                system_prompt="You are a developer",
+            ),
+            RoleConfig(
+                role_name="reviewer",
+                display_name="Reviewer",
+                telegram_bot_name="reviewer_bot",
+                prompt_file="",
+                agent_type="mock_agent",
+                cli_command="echo",
+                system_prompt="You are a reviewer",
+            ),
+        ]
+        MockConnector = MagicMock()
+        mock_instance = MagicMock()
+        mock_instance.check_availability.return_value = True
+        mock_instance.is_alive.return_value = True
+        mock_instance.launch = AsyncMock()
+        mock_instance.execute = AsyncMock(return_value="Mock response")
+        mock_instance.shutdown = AsyncMock()
+        MockConnector.return_value = mock_instance
+        mock_get_connector.return_value = MockConnector
+        lab = NeuroCrewLab(storage=mock_storage)
+        yield lab
 
 
 @pytest.mark.asyncio

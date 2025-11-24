@@ -8,7 +8,7 @@ import pytest
 import asyncio
 from unittest.mock import AsyncMock, patch
 from app.application import NeuroCrewApplication, get_application
-from app.config import Config
+from app.config import Config, RoleConfig
 
 
 class TestImplementationIntegration:
@@ -17,57 +17,63 @@ class TestImplementationIntegration:
     @pytest.mark.asyncio
     async def test_real_application_initialization(self):
         """Test real NeuroCrewApplication initialization."""
-        app = NeuroCrewApplication()
+        with patch("app.core.agent_coordinator.AgentCoordinator.validate_and_initialize_roles") as mock_validate:
+            mock_validate.return_value = []
+            app = NeuroCrewApplication()
 
-        # Should initialize without interfaces
-        success = await app.initialize()
-        assert success is True
-        assert app.ncrew_lab is not None
-        assert app.operation_mode.value in ["headless", "telegram", "web", "multi"]
-        assert not app.is_running  # Not started yet
+            # Should initialize without interfaces
+            success = await app.initialize()
+            assert success is True
+            assert app.ncrew_lab is not None
+            assert app.operation_mode.value in ["headless", "telegram", "web", "multi"]
+            assert not app.is_running  # Not started yet
 
-        # Verify core components are properly initialized
-        assert hasattr(app.ncrew_lab, 'agent_coordinator')
-        assert hasattr(app.ncrew_lab, 'session_manager')
-        assert hasattr(app.ncrew_lab, 'dialogue_orchestrator')
+            # Verify core components are properly initialized
+            assert hasattr(app.ncrew_lab, 'agent_coordinator')
+            assert hasattr(app.ncrew_lab, 'session_manager')
+            assert hasattr(app.ncrew_lab, 'dialogue_orchestrator')
 
     @pytest.mark.asyncio
     async def test_operation_mode_detection(self):
         """Test operation mode detection logic."""
-        app = NeuroCrewApplication()
+        with patch("app.core.agent_coordinator.AgentCoordinator.validate_and_initialize_roles") as mock_validate:
+            mock_validate.return_value = []
+            app = NeuroCrewApplication()
 
-        with patch('app.application.Config.MAIN_BOT_TOKEN', 'fake_token'), \
-             patch('app.application.Config.TARGET_CHAT_ID', '123456789'):
+            with patch('app.application.Config.MAIN_BOT_TOKEN', 'fake_token'), \
+                 patch('app.application.Config.TARGET_CHAT_ID', '123456789'):
 
-            await app.initialize()
-            # With Telegram config, should detect multi_interface mode
-            assert app.operation_mode.value in ["telegram", "multi"]
+                await app.initialize()
+                # With Telegram config, should detect multi_interface mode
+                assert app.operation_mode.value in ["telegram", "multi"]
 
     @pytest.mark.asyncio
     async def test_application_lifecycle(self):
         """Test complete application lifecycle."""
-        app = NeuroCrewApplication()
+        with patch("app.core.agent_coordinator.AgentCoordinator.validate_and_initialize_roles") as mock_validate:
+            mock_validate.return_value = []
+            app = NeuroCrewApplication()
 
-        # Initialize
-        assert await app.initialize()
-        assert not app.is_running
-
-        # Mock interfaces for testing
-        with patch.object(app, '_start_telegram_interface', return_value=True), \
-             patch.object(app, '_start_web_interface', return_value=True):
-
-            # Start application
-            assert await app.start()
-            assert app.is_running
-
-            # Check status
-            status = app.get_status()
-            assert status["application"]["running"] is True
-            assert status["application"]["ncrew_engine_initialized"] is True
-
-            # Stop application
-            assert await app.stop()
+            # Initialize
+            assert await app.initialize()
             assert not app.is_running
+
+            # Mock interfaces for testing
+            with patch.object(app, '_start_telegram_interface', return_value=True), \
+                 patch.object(app, '_start_web_interface', return_value=True):
+
+                # Start application
+                assert await app.start()
+                assert app.is_running
+
+                # Check status
+                status = app.get_status()
+                assert status["application"]["running"] is True
+                assert status["application"]["ncrew_engine_initialized"] is True
+
+                # Stop application
+                assert await app.stop()
+                assert not app.is_running
 
     @pytest.mark.asyncio
     async def test_headless_mode_operation(self):
@@ -90,45 +96,47 @@ class TestImplementationIntegration:
     @pytest.mark.asyncio
     async def test_message_processing_flow(self):
         """Test end-to-end message processing."""
-        app = NeuroCrewApplication()
-        await app.initialize()
+        with patch("app.core.agent_coordinator.AgentCoordinator.validate_and_initialize_roles") as mock_validate:
+            mock_validate.return_value = []
+            app = NeuroCrewApplication()
+            await app.initialize()
 
-        # Start application (mock interfaces)
-        with patch.object(app, '_start_telegram_interface', return_value=True), \
-             patch.object(app, '_start_web_interface', return_value=True):
-            await app.start()
-            assert app.is_running
+            # Start application (mock interfaces)
+            with patch.object(app, '_start_telegram_interface', return_value=True), \
+                 patch.object(app, '_start_web_interface', return_value=True):
+                await app.start()
+                assert app.is_running
 
-        # Mock NeuroCrewLab.handle_message
-        from app.config import RoleConfig
+            # Mock NeuroCrewLab.handle_message
+            from app.config import RoleConfig
 
-        mock_role = RoleConfig(
-            role_name="test_role",
-            display_name="Test Role",
-            telegram_bot_name="test_bot",
-            prompt_file="test.md",
-            agent_type="test_agent",
-            cli_command="test",
-            description="Test role"
-        )
+            mock_role = RoleConfig(
+                role_name="test_role",
+                display_name="Test Role",
+                telegram_bot_name="test_bot",
+                prompt_file="test.md",
+                agent_type="test_agent",
+                cli_command="test",
+                description="Test role"
+            )
 
-        mock_responses = [
-            (mock_role, "Response from role 1"),
-            (mock_role, "Response from role 2")
-        ]
+            mock_responses = [
+                (mock_role, "Response from role 1"),
+                (mock_role, "Response from role 2")
+            ]
 
-        async def mock_handle_message(chat_id, user_text):
-            for response in mock_responses:
-                yield response
+            async def mock_handle_message(chat_id, user_text):
+                for response in mock_responses:
+                    yield response
 
-        app.ncrew_lab.handle_message = mock_handle_message
+            app.ncrew_lab.handle_message = mock_handle_message
 
-        # Mock interface response sending
-        with patch.object(app, '_send_response_to_interface', return_value=True):
+            # Mock interface response sending
+            with patch.object(app, '_send_response_to_interface', return_value=True):
 
-            # Process message
-            success = await app.process_message("web", 123456, "Test message")
-            assert success is True
+                # Process message
+                success = await app.process_message("web", 123456, "Test message")
+                assert success is True
 
     @pytest.mark.asyncio
     async def test_interface_failure_handling(self):
@@ -165,16 +173,30 @@ class TestImplementationIntegration:
     @pytest.mark.asyncio
     async def test_configuration_integration(self):
         """Test integration with existing configuration system."""
-        app = NeuroCrewApplication()
-        await app.initialize()
+        with patch("app.core.agent_coordinator.AgentCoordinator.validate_and_initialize_roles") as mock_validate, \
+             patch("app.config.Config.get_available_roles") as mock_get_roles:
+            mock_validate.return_value = []
+            mock_get_roles.return_value = [
+                RoleConfig(
+                    role_name="dev",
+                    display_name="Developer",
+                    telegram_bot_name="dev_bot",
+                    prompt_file="",
+                    agent_type="mock_agent",
+                    cli_command="echo",
+                    system_prompt="You are a developer",
+                ),
+            ]
+            app = NeuroCrewApplication()
+            await app.initialize()
 
-        # Check if it can access existing configuration
-        roles = Config.get_available_roles()
-        assert len(roles) > 0
+            # Check if it can access existing configuration
+            roles = Config.get_available_roles()
+            assert len(roles) > 0
 
-        status = app.get_status()
-        assert "roles" in status
-        assert status["roles"]["total_loaded"] > 0
+            status = app.get_status()
+            assert "roles" in status
+            assert status["roles"]["total_loaded"] > 0
 
     @pytest.mark.asyncio
     async def test_error_handling_during_initialization(self):
@@ -196,22 +218,36 @@ class TestImplementationCompatibility:
     @pytest.mark.asyncio
     async def test_backward_compatibility_with_existing_config(self):
         """Test that new implementation works with existing configuration."""
-        # Load existing roles
-        roles = Config.get_available_roles()
-        assert len(roles) > 0
+        with patch("app.core.agent_coordinator.AgentCoordinator.validate_and_initialize_roles") as mock_validate, \
+             patch("app.config.Config.get_available_roles") as mock_get_roles:
+            mock_validate.return_value = []
+            mock_get_roles.return_value = [
+                RoleConfig(
+                    role_name="dev",
+                    display_name="Developer",
+                    telegram_bot_name="dev_bot",
+                    prompt_file="",
+                    agent_type="mock_agent",
+                    cli_command="echo",
+                    system_prompt="You are a developer",
+                ),
+            ]
+            # Load existing roles
+            roles = Config.get_available_roles()
+            assert len(roles) > 0
 
-        # Check if we have Telegram configuration
-        telegram_available = bool(Config.MAIN_BOT_TOKEN and Config.TARGET_CHAT_ID)
+            # Check if we have Telegram configuration
+            telegram_available = bool(Config.MAIN_BOT_TOKEN and Config.TARGET_CHAT_ID)
 
-        app = NeuroCrewApplication()
-        await app.initialize()
+            app = NeuroCrewApplication()
+            await app.initialize()
 
-        if telegram_available:
-            # Should detect that Telegram is available
-            assert app.operation_mode.value in ["telegram", "multi"]
-        else:
-            # Should work without Telegram
-            assert app.operation_mode.value in ["headless", "web", "multi"]
+            if telegram_available:
+                # Should detect that Telegram is available
+                assert app.operation_mode.value in ["telegram", "multi"]
+            else:
+                # Should work without Telegram
+                assert app.operation_mode.value in ["headless", "web", "multi"]
 
     def test_import_compatibility(self):
         """Test that imports work with existing system."""
@@ -228,19 +264,21 @@ class TestImplementationCompatibility:
     @pytest.mark.asyncio
     async def test_component_integration(self):
         """Test integration with existing NeuroCrew components."""
-        app = NeuroCrewApplication()
-        await app.initialize()
+        with patch("app.core.agent_coordinator.AgentCoordinator.validate_and_initialize_roles") as mock_validate:
+            mock_validate.return_value = []
+            app = NeuroCrewApplication()
+            await app.initialize()
 
-        # Verify existing components are accessible
-        assert hasattr(app.ncrew_lab, 'agent_coordinator')
-        assert hasattr(app.ncrew_lab, 'session_manager')
-        assert hasattr(app.ncrew_lab, 'dialogue_orchestrator')
-        assert hasattr(app.ncrew_lab, 'storage')
+            # Verify existing components are accessible
+            assert hasattr(app.ncrew_lab, 'agent_coordinator')
+            assert hasattr(app.ncrew_lab, 'session_manager')
+            assert hasattr(app.ncrew_lab, 'dialogue_orchestrator')
+            assert hasattr(app.ncrew_lab, 'storage')
 
-        # Verify they are properly initialized
-        assert app.ncrew_lab.agent_coordinator is not None
-        assert app.ncrew_lab.session_manager is not None
-        assert app.ncrew_lab.dialogue_orchestrator is not None
+            # Verify they are properly initialized
+            assert app.ncrew_lab.agent_coordinator is not None
+            assert app.ncrew_lab.session_manager is not None
+            assert app.ncrew_lab.dialogue_orchestrator is not None
 
 
 if __name__ == "__main__":

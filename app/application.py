@@ -10,13 +10,13 @@ import logging
 from typing import Dict, Optional, List, Any
 from enum import Enum
 
-from app.config import Config
+from app.config.manager import Config
 from app.core.engine import NeuroCrewLab
 from app.utils.logger import get_logger
 
 # Import interfaces (existing classes)
-from app.interfaces.telegram_bot import TelegramBot
-from app.interfaces.web_server import app as web_app
+from app.interfaces.telegram.telegram_bot import TelegramBot
+from app.interfaces.web.web_server import app as web_app
 
 
 class OperationMode(Enum):

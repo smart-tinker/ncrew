@@ -60,7 +60,7 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
-class DependencyDependencyTestResult:
+class DependencyTestResult:
     """Result of an external dependency test."""
 
     name: str
@@ -80,7 +80,7 @@ class ExternalDepsTester:
         self.project_root = project_root
         self.timeout = timeout
         self.parallel = parallel
-        self.results: List[DependencyDependencyTestResult] = []
+        self.results: List[DependencyTestResult] = []
         self.test_start_time = time.time()
 
         # Test configuration
@@ -100,7 +100,7 @@ class ExternalDepsTester:
             "cloudflare_dns": "1.1.1.1:53",
         }
 
-    def _run_test(self, test_func: Callable, *args, **kwargs) -> DependencyDependencyTestResult:
+    def _run_test(self, test_func: Callable, *args, **kwargs) -> DependencyTestResult:
         """Run a test function and measure performance."""
         start_time = time.time()
         test_name = test_func.__name__.replace("test_", "")
@@ -109,11 +109,11 @@ class ExternalDepsTester:
             result = test_func(*args, **kwargs)
             duration = time.time() - start_time
 
-            if isinstance(result, DependencyDependencyTestResult):
+            if isinstance(result, DependencyTestResult):
                 result.duration = duration
                 return result
             else:
-                return DependencyDependencyTestResult(
+                return DependencyTestResult(
                     name=test_name,
                     category="general",
                     status="PASS",
@@ -126,7 +126,7 @@ class ExternalDepsTester:
             duration = time.time() - start_time
             logger.error(f"Test {test_name} failed: {str(e)}")
 
-            return DependencyDependencyTestResult(
+            return DependencyTestResult(
                 name=test_name,
                 category="general",
                 status="FAIL",
@@ -135,9 +135,9 @@ class ExternalDepsTester:
                 error_traceback=str(e),
             )
 
-    def test_cli_agent_availability(self) -> DependencyDependencyTestResult:
+    def test_cli_agent_availability(self) -> DependencyTestResult:
         """Test CLI agent availability and basic functionality."""
-        result = DependencyDependencyTestResult(
+        result = DependencyTestResult(
             name="CLI Agent Availability",
             category="cli_agents",
             status="PASS",

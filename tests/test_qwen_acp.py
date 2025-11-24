@@ -3,6 +3,7 @@ import asyncio
 import json
 import sys
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
 import pytest_asyncio
@@ -146,16 +147,32 @@ async def test_qwen_acp_connector_integration(mock_qwen_command):
 
 # Simple unit tests for config
 def test_load_roles():
-    from app.config import Config
-    # Reset for test
-    Config.roles_registry = None
-    Config.role_based_enabled = False
+    from app.config import Config, RoleConfig
+    with patch("app.config.manager.multi_project_manager.get_project") as mock_get_project:
+        mock_project = MagicMock()
+        mock_project.load_config.return_value = {
+            "roles": [
+                {
+                    "role_name": "dev",
+                    "display_name": "Developer",
+                    "telegram_bot_name": "dev_bot",
+                    "prompt_file": "",
+                    "agent_type": "mock_agent",
+                    "cli_command": "echo",
+                    "system_prompt": "You are a developer",
+                }
+            ]
+        }
+        mock_get_project.return_value = mock_project
+        # Reset for test
+        Config.roles_registry = None
+        Config.role_based_enabled = False
 
-    # Test loading roles
-    success = Config.load_roles()
-    assert success
-    assert Config.is_role_based_enabled()
-    assert len(Config.get_available_roles()) > 0
+        # Test loading roles
+        success = Config.load_roles()
+        assert success
+        assert Config.is_role_based_enabled()
+        assert len(Config.get_available_roles()) > 0
 
 
 def test_validate_config():

@@ -21,7 +21,7 @@ ROLE_CONFIG_FIELDS = [
 load_dotenv()
 
 # Resolve template directory relative to project root
-base_dir = Path(__file__).resolve().parent.parent.parent
+base_dir = Path(__file__).resolve().parent.parent.parent.parent
 template_dir = base_dir / "templates"
 
 app = Flask(__name__, template_folder=str(template_dir))
