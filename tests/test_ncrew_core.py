@@ -19,31 +19,38 @@ def ncrew_lab(mock_storage):
     with patch("app.core.memory_manager.MemoryManager.start", new_callable=AsyncMock), \
          patch("app.core.port_manager.PortManager.start", new_callable=AsyncMock), \
          patch("app.core.session_manager.SessionManager.initialize", new_callable=AsyncMock):
-        # Patch Config where it is used (ncrew module)
-        with patch("app.core.engine.Config") as mock_config:
-            mock_config.is_role_based_enabled.return_value = True
-            mock_config.get_role_sequence.return_value = [
+        # Patch Config where it is used (ncrew module and agent coordinator)
+        with patch("app.core.engine.Config") as mock_engine_config, \
+             patch("app.core.agent_coordinator.Config") as mock_ac_config:
+            roles = [
                 RoleConfig(
                     role_name="software_developer",
                     display_name="Software Developer",
                     telegram_bot_name="software_developer_bot",
-                    system_prompt_file="",
+                    prompt_file="software_developer.md",
                     agent_type="mock_agent",
                     cli_command="echo",
+                    telegram_bot_token="test_token_1",
                 ),
                 RoleConfig(
                     role_name="code_review",
                     display_name="Code Review",
                     telegram_bot_name="code_review_bot",
-                    system_prompt_file="",
+                    prompt_file="code_review.md",
                     agent_type="mock_agent",
                     cli_command="echo",
+                    telegram_bot_token="test_token_2",
                 ),
             ]
-            mock_config.TELEGRAM_BOT_TOKENS = {
-                "software_developer_bot": "token1",
-                "code_review_bot": "token2",
-            }
+
+            for cfg in (mock_engine_config, mock_ac_config):
+                cfg.is_role_based_enabled.return_value = True
+                cfg.get_role_sequence.return_value = roles
+                cfg.TELEGRAM_BOT_TOKENS = {
+                    "software_developer_bot": "test_token_1",
+                    "code_review_bot": "test_token_2",
+                }
+                cfg.ALLOW_DUMMY_TOKENS = True
 
             # Also patch get_connector_spec in ncrew to avoid validation errors
             with patch("app.core.agent_coordinator.get_connector_spec") as mock_spec:
@@ -91,9 +98,8 @@ async def test_autonomous_cycle_termination(ncrew_lab):
         mock_process.side_effect = [
             "Software Developer response 1",  # Cycle 1, software_developer
             "Code Review response 1",  # Cycle 1, code_review
-            ".....",  # Cycle 2, senior_architect
-            ".....",  # Cycle 2, devops_senior
-            ".....",  # Cycle 2, scrum_master (all agents finished)
+            ".....",  # Cycle 2, software_developer
+            ".....",  # Cycle 2, code_review (all agents finished)
         ]
         # Also need to mock get_or_create_connector to avoid blocking async calls
         with patch.object(
@@ -121,7 +127,7 @@ async def test_autonomous_cycle_termination(ncrew_lab):
         assert results[1][0] == "code_review"
         assert results[1][1] == "Code Review response 1"
 
-        assert mock_process.call_count == 5
+        assert mock_process.call_count == 4
 
 
 @pytest.mark.asyncio

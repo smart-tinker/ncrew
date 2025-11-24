@@ -34,9 +34,8 @@ def cmd_init(args):
         print(f"✅ Created project: {project_name}")
         print(f"📁 Project directory: {project.project_dir}")
         print(f"\nNext steps:")
-        print(f"1. Edit configuration: {project.get_env_file()}")
-        print(f"2. Configure roles: {project.get_roles_file()}")
-        print(f"3. Run: python main.py")
+        print(f"1. Edit configuration: {project.get_config_file()}")
+        print(f"2. Run: python main.py")
         return 0
         
     except Exception as e:
@@ -50,7 +49,7 @@ def cmd_list(args):
     current = multi_project_manager.get_current_project()
     
     if not projects:
-        print("No projects found. Create one with: ncrew init <project_name>")
+        print("No projects found. Create one with: python ncrew_cli.py init <project_name>")
         return 0
     
     print("Available projects:")
@@ -78,7 +77,7 @@ def cmd_current(args):
     current = multi_project_manager.get_current_project()
     
     if not current:
-        print("No project selected. Use: ncrew switch <project_name>")
+        print("No project selected. Use: python ncrew_cli.py switch <project_name>")
         return 1
     
     print(f"Current project: {current}")
@@ -86,8 +85,7 @@ def cmd_current(args):
     project = multi_project_manager.get_project(current)
     if project:
         print(f"Project directory: {project.project_dir}")
-        print(f"Configuration file: {project.get_env_file()}")
-        print(f"Roles file: {project.get_roles_file()}")
+        print(f"Configuration file: {project.get_config_file()}")
     return 0
 
 
@@ -109,7 +107,7 @@ def cmd_delete(args):
         multi_project_manager.delete_project(project_name)
         print(f"✅ Deleted project: {project_name}")
         
-        # If current project was deleted, clear it
+        # If current project was deleted, switch to another
         current = multi_project_manager.get_current_project()
         if current == project_name:
             projects = multi_project_manager.list_projects()

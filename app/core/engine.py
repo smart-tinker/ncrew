@@ -110,12 +110,10 @@ class NeuroCrewLab:
         # Load system prompts for all validated roles
         if self.agent_coordinator.is_role_based:
             for role in self.roles:
-                if (
-                    not role.system_prompt
-                    and getattr(role, "system_prompt_file", None)
-                ):
+                prompt_path = getattr(role, "system_prompt_path", None)
+                if not role.system_prompt and prompt_path:
                     try:
-                        with open(role.system_prompt_file, "r", encoding="utf-8") as f:
+                        with open(prompt_path, "r", encoding="utf-8") as f:
                             role.system_prompt = f.read().strip()
                     except FileNotFoundError as e:
                         self.logger.error(

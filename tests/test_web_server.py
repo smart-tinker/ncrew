@@ -53,7 +53,7 @@ def test_save_roles(mock_save_roles, client):
     form_data = {
         'role_name': ['new_role'],
         'display_name': ['New Role'],
-        'system_prompt_file': ['prompts/new.md'],
+        'prompt_file': ['prompts/new.md'],
         'agent_type': ['qwen_acp'],
         'cli_command': ['qwen'],
         'description': ['A new role.'],
