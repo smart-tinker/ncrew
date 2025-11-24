@@ -97,6 +97,12 @@ class MultiProjectManager:
         # Copy default prompts if prompts_dir is empty
         if not any(self.prompts_dir.glob("*.md")):
             self._copy_default_prompts()
+
+        # If no projects exist, create a default one
+        if not self.list_projects():
+            self.logger.info("No projects found. Creating 'default' project...")
+            self.create_project("default")
+            self.set_current_project("default")
     
     def get_prompts_dir(self) -> Path:
         """Get shared prompts directory."""
@@ -164,6 +170,7 @@ class MultiProjectManager:
 
     def load_project_config(self, project_name: str) -> Dict[str, Any]:
         """Load project configuration and apply to environment."""
+        from app.config import Config
         project = self.get_project(project_name)
         if not project:
             raise ValueError(f"Project '{project_name}' not found")
@@ -171,21 +178,10 @@ class MultiProjectManager:
         # Load project config.yaml
         config = project.load_config()
 
-        # Apply to environment
-        if config.get('main_bot_token'):
-            os.environ['MAIN_BOT_TOKEN'] = config['main_bot_token']
-        if config.get('target_chat_id'):
-            os.environ['TARGET_CHAT_ID'] = str(config['target_chat_id'])
-        if config.get('log_level'):
-            os.environ['LOG_LEVEL'] = config['log_level']
-
-        # Set bot tokens from roles
-        for role in config.get('roles', []):
-            if role.get('telegram_bot_token'):
-                token_var = f"{role['telegram_bot_name'].upper()}_TOKEN"
-                os.environ[token_var] = role['telegram_bot_token']
-
         self.set_current_project(project_name)
+
+        # Trigger a hot-reload in the Config class
+        Config.reload_configuration(project_name)
 
         return {
             "project_name": project_name,
