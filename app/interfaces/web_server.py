@@ -6,15 +6,16 @@ from flask import Flask, Response, render_template, request, redirect, url_for, 
 from dotenv import load_dotenv, find_dotenv, set_key
 from pathlib import Path
 
-ROLE_YAML_FIELDS = [
+ROLE_CONFIG_FIELDS = [
     "role_name",
     "display_name",
     "telegram_bot_name",
-    "system_prompt_file",
+    "prompt_file",
     "agent_type",
     "cli_command",
     "description",
     "is_moderator",
+    "telegram_bot_token",
 ]
 
 load_dotenv()

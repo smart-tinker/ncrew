@@ -1,129 +1,169 @@
 """
 Configuration management for NeuroCrew Lab.
 
-This module handles all configuration settings including environment variables,
-CLI paths, and system parameters.
+Loads project configuration from ~/.ncrew/<project>/config.yaml
 """
 
 import os
 import yaml
 from typing import Dict, Optional, List, Any
 from pathlib import Path
-from dotenv import load_dotenv
 from dataclasses import dataclass, field, fields
 
 from app.connectors import get_connector_spec
 from app.utils.logger import get_logger
+from app.config_manager import multi_project_manager
 
-# Load environment variables from .env file
-load_dotenv()
+
+def _initialize_project_context() -> Dict[str, Any]:
+    """Initialize project context from ~/.ncrew/."""
+    project_name = os.getenv("NCREW_PROJECT") or multi_project_manager.get_current_project()
+
+    if not project_name:
+        existing_projects = multi_project_manager.list_projects()
+        if existing_projects:
+            project_name = existing_projects[0]
+        else:
+            project_name = "default"
+            multi_project_manager.create_project(project_name)
+
+    project = multi_project_manager.get_project(project_name)
+    if project is None:
+        project = multi_project_manager.create_project(project_name)
+
+    # Load config.yaml
+    config = project.load_config()
+
+    # Apply to environment
+    if config.get('main_bot_token'):
+        os.environ['MAIN_BOT_TOKEN'] = config['main_bot_token']
+    if config.get('target_chat_id'):
+        os.environ['TARGET_CHAT_ID'] = str(config['target_chat_id'])
+    if config.get('log_level'):
+        os.environ['LOG_LEVEL'] = config['log_level']
+
+    # Set bot tokens from roles
+    for role in config.get('roles', []):
+        if role.get('telegram_bot_token'):
+            token_var = f"{role['telegram_bot_name'].upper()}_TOKEN"
+            os.environ[token_var] = role['telegram_bot_token']
+
+    os.environ["NCREW_PROJECT"] = project_name
+    os.environ["NCREW_PROJECT_ROOT"] = str(project.project_dir)
+
+    data_dir = project.project_dir / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+
+    return {
+        "project_name": project_name,
+        "project_dir": project.project_dir,
+        "config_file": project.get_config_file(),
+        "config": config,
+        "data_dir": data_dir,
+        "prompts_dir": multi_project_manager.get_prompts_dir(),
+    }
+
+
+PROJECT_CONTEXT = _initialize_project_context()
 
 
 @dataclass
 class RoleConfig:
     """Конфигурация роли агента."""
 
-    # Основные поля (все обязательные аргументы идут первыми)
+    # Основные поля
     role_name: str
     display_name: str
     telegram_bot_name: str
-    system_prompt_file: str
+    prompt_file: str  # Имя файла в ~/.ncrew/prompts/
     agent_type: str
-    cli_command: str = ""  # Optional for SDK agents
+    cli_command: str = ""
 
-    # Дополнительная информация (с значениями по умолчанию)
+    # Дополнительная информация
     description: str = ""
-    is_moderator: bool = False  # Role has authority to stop autonomous cycles
+    is_moderator: bool = False
+    telegram_bot_token: str = ""  # Опционально в config.yaml
 
-    # Runtime поля (загружаются при инициализации)
+    # Runtime поля
     system_prompt: str = ""
     system_prompt_path: Optional[Path] = None
 
     def __post_init__(self):
         """Валидация и пост-обработка после инициализации."""
         connector_spec = get_connector_spec(self.agent_type)
-        # Валидация обязательных полей
+        
         if not self.role_name:
             raise ValueError("role_name is required")
         if not self.telegram_bot_name:
             raise ValueError("telegram_bot_name is required")
         if not self.agent_type:
             raise ValueError("agent_type is required")
-        if (not self.cli_command) and (
-            not connector_spec or connector_spec.requires_cli
-        ):
+        if (not self.cli_command) and (not connector_spec or connector_spec.requires_cli):
             raise ValueError("cli_command is required")
 
-        # Преобразование строки в Path для системного промпта
-        if self.system_prompt_file:
-            self.system_prompt_path = Path(self.system_prompt_file)
+        # Путь к промпту в ~/.ncrew/prompts/
+        if self.prompt_file:
+            prompts_dir = multi_project_manager.get_prompts_dir()
+            self.system_prompt_path = prompts_dir / self.prompt_file
 
     def get_bot_token(self) -> Optional[str]:
         """Получает токен для Telegram бота этой роли."""
+        # Сначала из конфига роли, потом из словаря
+        if self.telegram_bot_token:
+            return self.telegram_bot_token
         return Config.TELEGRAM_BOT_TOKENS.get(self.telegram_bot_name)
 
     def __str__(self) -> str:
-        """Строковое представление роли."""
         return f"Role({self.role_name}: {self.display_name})"
 
     def __repr__(self) -> str:
-        """Детальное строковое представление роли."""
-        return (
-            f"RoleConfig(role_name='{self.role_name}', "
-            f"agent_type='{self.agent_type}', "
-            f"cli_command='{self.cli_command}')"
-        )
+        return f"RoleConfig(role_name='{self.role_name}', agent_type='{self.agent_type}')"
 
 
 class RolesRegistry:
-    """Реестр ролей с возможностью поиска и фильтрации."""
+    """Реестр ролей."""
 
     def __init__(self):
         self.roles: Dict[str, RoleConfig] = {}
 
     def add_role(self, role: RoleConfig):
-        """Добавляет роль в реестр."""
         if role.role_name in self.roles:
             raise ValueError(f"Role '{role.role_name}' already exists")
         self.roles[role.role_name] = role
 
     def get_role(self, role_name: str) -> Optional[RoleConfig]:
-        """Получает роль по имени."""
         return self.roles.get(role_name)
 
     def get_roles_by_agent_type(self, agent_type: str) -> List[RoleConfig]:
-        """Возвращает список ролей для указанного типа агента."""
         return [role for role in self.roles.values() if role.agent_type == agent_type]
 
     def get_available_roles(self) -> List[RoleConfig]:
-        """Возвращает список всех доступных ролей."""
         return list(self.roles.values())
 
     def validate_role_dependencies(self) -> List[str]:
-        """Проверяет зависимости ролей и возвращает список ошибок."""
+        """Проверяет зависимости ролей."""
         errors = []
 
         for role_name, role in self.roles.items():
             connector_spec = get_connector_spec(role.agent_type)
-            # Проверяем наличие файла системного промпта
+            
+            # Проверяем наличие файла промпта
             if role.system_prompt_path and not role.system_prompt_path.exists():
                 errors.append(
-                    f"Role '{role_name}': System prompt file not found: {role.system_prompt_path}"
+                    f"Role '{role_name}': Prompt file not found: {role.system_prompt_path}"
                 )
 
-            # Проверяем наличие токена для бота
+            # Проверяем наличие токена
             if not role.get_bot_token():
                 errors.append(
-                    f"Role '{role_name}': No Telegram bot token found for '{role.telegram_bot_name}'"
+                    f"Role '{role_name}': No Telegram bot token for '{role.telegram_bot_name}'"
                 )
 
             # Проверяем agent_type
             if not role.agent_type:
                 errors.append(f"Role '{role_name}': agent_type is missing")
             elif not connector_spec:
-                errors.append(
-                    f"Role '{role_name}': Unknown agent_type '{role.agent_type}'"
-                )
+                errors.append(f"Role '{role_name}': Unknown agent_type '{role.agent_type}'")
 
             # Проверяем cli_command
             requires_cli = connector_spec.requires_cli if connector_spec else True
@@ -134,7 +174,7 @@ class RolesRegistry:
 
 
 def create_role_from_dict(role_data: Dict[str, Any]) -> RoleConfig:
-    """Создает RoleConfig из словаря (для YAML парсинга), игнорируя неизвестные поля."""
+    """Создает RoleConfig из словаря."""
     allowed_fields = {f.name for f in fields(RoleConfig)}
     sanitized_data = {k: v for k, v in role_data.items() if k in allowed_fields}
     return RoleConfig(**sanitized_data)
@@ -143,65 +183,53 @@ def create_role_from_dict(role_data: Dict[str, Any]) -> RoleConfig:
 class Config:
     """Configuration class for NeuroCrew Lab."""
 
-    # Logger instance
     logger = get_logger("Config")
 
-    # Главный токен для прослушивания
+    # From config.yaml
     MAIN_BOT_TOKEN: str = os.getenv("MAIN_BOT_TOKEN", "")
-
-    # ID целевого чата
     TARGET_CHAT_ID: int = int(os.getenv("TARGET_CHAT_ID", "0"))
-
-    # Новый формат токенов для ролей
     TELEGRAM_BOT_TOKENS: Dict[str, str] = {}
+
+    # Project metadata
+    PROJECT_NAME: str = PROJECT_CONTEXT["project_name"]
+    PROJECT_DIR: Path = PROJECT_CONTEXT["project_dir"]
+    PROJECT_CONFIG_FILE: Path = PROJECT_CONTEXT["config_file"]
+    PROMPTS_DIR: Path = PROJECT_CONTEXT["prompts_dir"]
 
     # Role-based configuration
     roles_registry: Optional[RolesRegistry] = None
     role_based_enabled: bool = False
 
     # System Configuration
-    # Maximum conversation length: 200 messages is a balance between context retention
-    # and memory/performance. Allows ~30-60 minutes of active multi-agent conversation.
-    # Can be increased via .env if more context needed (e.g., 500 for extended sessions).
     MAX_CONVERSATION_LENGTH: int = int(os.getenv("MAX_CONVERSATION_LENGTH", "200"))
     AGENT_TIMEOUT: int = int(os.getenv("AGENT_TIMEOUT", "600"))
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO").upper()
-    DATA_DIR: Path = Path(os.getenv("DATA_DIR", "./data"))
+    DATA_DIR: Path = Path(PROJECT_CONTEXT["data_dir"])
+    ALLOW_DUMMY_TOKENS: bool = os.getenv("NCREW_ALLOW_DUMMY_TOKENS", "1").lower() in ("1", "true", "yes")
 
-    # System Reminder Configuration
     SYSTEM_REMINDER_INTERVAL: int = int(os.getenv("SYSTEM_REMINDER_INTERVAL", "5"))
 
     # Telegram Configuration
     TELEGRAM_MAX_MESSAGE_LENGTH: int = 4096
-    MESSAGE_SPLIT_THRESHOLD: int = 4000  # Split before hitting limit
+    MESSAGE_SPLIT_THRESHOLD: int = 4000
 
     @classmethod
     def validate(cls) -> bool:
-        """
-        Validate critical configuration settings.
+        """Validate critical configuration settings."""
+        if not cls.MAIN_BOT_TOKEN or cls.MAIN_BOT_TOKEN == "your_main_listener_bot_token_here":
+            if not cls.ALLOW_DUMMY_TOKENS:
+                raise ValueError("MAIN_BOT_TOKEN не сконфигурирован.")
+            cls.logger.warning("⚠️  Running with dummy MAIN_BOT_TOKEN (test mode)")
 
-        Returns:
-            bool: True if all critical settings are valid
-
-        Raises:
-            ValueError: If critical settings are missing or invalid
-        """
-        # Проверка главного токена
-        if (
-            not cls.MAIN_BOT_TOKEN
-            or cls.MAIN_BOT_TOKEN == "your_main_listener_bot_token_here"
-        ):
-            raise ValueError("MAIN_BOT_TOKEN не сконфигурирован.")
-
-        # Проверка ID чата
         if cls.TARGET_CHAT_ID == 0:
-            raise ValueError("TARGET_CHAT_ID не сконфигурирован.")
+            if not cls.ALLOW_DUMMY_TOKENS:
+                raise ValueError("TARGET_CHAT_ID не сконфигурирован.")
+            cls.logger.warning("⚠️  Running with TARGET_CHAT_ID = 0 (test mode)")
 
-        # Проверка токенов ботов
         if not cls.TELEGRAM_BOT_TOKENS and cls.is_role_based_enabled():
-            raise ValueError(
-                "TELEGRAM_BOT_TOKENS не сконфигурирован или имеет неверный формат."
-            )
+            if not cls.ALLOW_DUMMY_TOKENS:
+                raise ValueError("TELEGRAM_BOT_TOKENS не сконфигурирован.")
+            cls.logger.warning("⚠️  Running with no bot tokens (test mode)")
 
         if cls.MAX_CONVERSATION_LENGTH < 1:
             raise ValueError("MAX_CONVERSATION_LENGTH must be greater than 0")
@@ -214,16 +242,9 @@ class Config:
 
         return True
 
-    # CLI методы удалены - теперь используем cli_command из agents.yaml
-
     @classmethod
     def get_data_dir(cls) -> Path:
-        """
-        Get the data directory and ensure it exists.
-
-        Returns:
-            Path: Data directory path
-        """
+        """Get the data directory and ensure it exists."""
         data_dir = Path(cls.DATA_DIR)
         data_dir.mkdir(parents=True, exist_ok=True)
         return data_dir
@@ -237,11 +258,9 @@ class Config:
 
     @classmethod
     def _load_telegram_bot_tokens(cls):
-        """Динамически загружает токены из переменных окружения на основе загруженных ролей."""
+        """Загружает токены из ролей."""
         if not cls.is_role_based_enabled():
-            cls.logger.debug(
-                "Role-based configuration is not enabled, skipping token loading"
-            )
+            cls.logger.debug("Role-based configuration is not enabled")
             return
 
         token_dict = {}
@@ -256,65 +275,47 @@ class Config:
 
         loaded_count = 0
         for role in loaded_roles:
-            # Проверяем, что у роли есть имя бота
             if not hasattr(role, "telegram_bot_name") or not role.telegram_bot_name:
-                cls.logger.debug(
-                    f"Role '{role.role_name}' has no telegram_bot_name, skipping"
-                )
                 continue
 
-            # Формируем имя переменной окружения
-            var_name = f"{role.telegram_bot_name.upper()}_TOKEN"
-
-            # Получаем токен из переменных окружения
-            token = os.getenv(var_name)
+            # Токен может быть в самой роли или в переменных окружения
+            token = role.telegram_bot_token or os.getenv(f"{role.telegram_bot_name.upper()}_TOKEN")
 
             if token:
                 token_dict[role.telegram_bot_name] = token
                 loaded_count += 1
                 cls.logger.debug(f"Token loaded for {role.telegram_bot_name}")
             else:
-                cls.logger.warning(f"Token not found for {role.telegram_bot_name} ({var_name})")
+                cls.logger.warning(f"Token not found for {role.telegram_bot_name}")
 
         cls.TELEGRAM_BOT_TOKENS = token_dict
-
-        cls.logger.info(
-            f"Token loading completed: {loaded_count}/{len(loaded_roles)} tokens loaded"
-        )
+        cls.logger.info(f"Token loading completed: {loaded_count}/{len(loaded_roles)} tokens loaded")
 
     @classmethod
-    def load_roles(cls, config_path: Path = Path("roles/agents.yaml")) -> bool:
-        """
-        Загружает и парсит конфигурацию ролей из agents.yaml.
-
-        Args:
-            config_path: Путь к файлу agents.yaml
-
-        Returns:
-            bool: True если конфигурация успешно загружена, False в противном случае
-        """
-        if not config_path.exists():
-            return False
-
+    def load_roles(cls) -> bool:
+        """Загружает роли из config.yaml текущего проекта."""
         try:
-            with open(config_path, "r", encoding="utf-8") as f:
-                config_data = yaml.safe_load(f)
-
-            if not config_data or "roles" not in config_data:
+            project = multi_project_manager.get_project(cls.PROJECT_NAME)
+            if not project:
+                cls.logger.error(f"Project {cls.PROJECT_NAME} not found")
                 return False
 
-            # Создаем реестр ролей
+            config = project.load_config()
+            
+            if not config or "roles" not in config:
+                cls.logger.warning("No roles in config.yaml")
+                cls.roles_registry = RolesRegistry()
+                cls.role_based_enabled = False
+                return False
+
             cls.roles_registry = RolesRegistry()
 
-            # Загружаем роли
-            for role_data in config_data.get("roles", []):
+            for role_data in config.get("roles", []):
                 try:
                     role = create_role_from_dict(role_data)
                     cls.roles_registry.add_role(role)
                 except Exception as e:
-                    cls.logger.error(
-                        f"Error loading role {role_data.get('role_name', 'unknown')}: {e}"
-                    )
+                    cls.logger.error(f"Error loading role {role_data.get('role_name', 'unknown')}: {e}")
                     continue
 
             cls.role_based_enabled = True
@@ -326,55 +327,48 @@ class Config:
 
     @classmethod
     def is_role_based_enabled(cls) -> bool:
-        """Проверяет, включена ли ролевая конфигурация."""
         return cls.role_based_enabled and cls.roles_registry is not None
 
     @classmethod
     def get_available_roles(cls) -> List[RoleConfig]:
-        """Возвращает список доступных ролей."""
         if cls.is_role_based_enabled():
             return cls.roles_registry.get_available_roles()
         return []
 
     @classmethod
     def get_role_sequence(cls, sequence_name: str = "default") -> List[RoleConfig]:
-        """Возвращает последовательность ролей (только доступные роли)."""
         if cls.is_role_based_enabled():
             return cls.roles_registry.get_available_roles()
         return []
 
     @classmethod
     def get_role_by_name(cls, role_name: str) -> Optional[RoleConfig]:
-        """Получает роль по имени."""
         if cls.is_role_based_enabled():
             return cls.roles_registry.get_role(role_name)
         return None
 
     @classmethod
     def get_roles_by_agent_type(cls, agent_type: str) -> List[RoleConfig]:
-        """Возвращает список ролей для указанного типа агента."""
         if cls.is_role_based_enabled():
             return cls.roles_registry.get_roles_by_agent_type(agent_type)
         return []
 
     @classmethod
     def validate_role_configuration(cls) -> List[str]:
-        """Проверяет конфигурацию ролей и возвращает список ошибок."""
         if not cls.is_role_based_enabled():
             return ["Role-based configuration is not enabled"]
-
         return cls.roles_registry.validate_role_dependencies()
 
     @classmethod
     def get_configuration_summary(cls) -> Dict[str, any]:
         """Возвращает сводку конфигурации."""
         summary = {
+            "project_name": cls.PROJECT_NAME,
             "main_bot_configured": bool(cls.MAIN_BOT_TOKEN),
             "target_chat_id": cls.TARGET_CHAT_ID,
             "data_dir": str(cls.DATA_DIR),
             "max_conversation_length": cls.MAX_CONVERSATION_LENGTH,
             "agent_timeout": cls.AGENT_TIMEOUT,
-            "system_reminder_interval": cls.SYSTEM_REMINDER_INTERVAL,
         }
 
         if cls.is_role_based_enabled():
@@ -382,157 +376,59 @@ class Config:
             summary["total_roles"] = len(cls.get_available_roles())
             summary["configured_bots"] = len(cls.TELEGRAM_BOT_TOKENS)
         else:
-            summary["mode"] = "legacy"
-            summary["configured_bots"] = len(cls.TELEGRAM_BOT_TOKENS)
+            summary["mode"] = "no_roles"
 
         return summary
 
     @classmethod
-    def reload_configuration(cls, config_path: Path = Path("roles/agents.yaml")) -> bool:
-        """
-        Hot-reload configuration without service interruption.
-
-        This method atomically reloads the roles configuration and notifies
-        all registered instances to update their internal state.
-
-        Args:
-            config_path: Path to the agents.yaml configuration file
-
-        Returns:
-            bool: True if reload was successful, False otherwise
-
-        Note:
-            This method implements atomic configuration updates with rollback
-            on validation errors to ensure system stability.
-        """
-        cls.logger.info(f"🔄 Starting hot-reload of configuration from {config_path}")
+    def reload_configuration(cls) -> bool:
+        """Hot-reload configuration from config.yaml."""
+        cls.logger.info("🔄 Starting hot-reload of configuration")
 
         try:
-            # Create temporary registry for new configuration
-            new_roles_registry = RolesRegistry()
-
-            # Load new configuration
-            if not config_path.exists():
-                cls.logger.error(f"Configuration file {config_path} does not exist")
+            project = multi_project_manager.get_project(cls.PROJECT_NAME)
+            if not project:
+                cls.logger.error(f"Project {cls.PROJECT_NAME} not found")
                 return False
 
-            with open(config_path, 'r', encoding='utf-8') as f:
-                yaml_data = yaml.safe_load(f)
+            config = project.load_config()
 
-            if not yaml_data or 'roles' not in yaml_data:
-                cls.logger.error("No roles found in configuration file")
-                return False
+            # Apply to environment
+            if config.get('main_bot_token'):
+                os.environ['MAIN_BOT_TOKEN'] = config['main_bot_token']
+                cls.MAIN_BOT_TOKEN = config['main_bot_token']
+            
+            if config.get('target_chat_id'):
+                os.environ['TARGET_CHAT_ID'] = str(config['target_chat_id'])
+                cls.TARGET_CHAT_ID = config['target_chat_id']
 
-            # Parse roles into temporary registry
-            for role_data in yaml_data['roles']:
+            # Reload roles
+            old_registry = cls.roles_registry
+            cls.roles_registry = RolesRegistry()
+
+            for role_data in config.get("roles", []):
                 try:
-                    role_config = RoleConfig(**role_data)
-
-                    # Validate role before adding
-                    if not role_config.system_prompt_file:
-                        role_config.system_prompt_file = ""
-
-                    # Load system prompt if file exists
-                    if role_config.system_prompt_file:
-                        prompt_path = Path(role_config.system_prompt_file)
-                        if prompt_path.exists():
-                            with open(prompt_path, 'r', encoding='utf-8') as f:
-                                role_config.system_prompt = f.read()
-                        else:
-                            role_config.system_prompt = ""
-
-                    new_roles_registry.add_role(role_config)
-
+                    role = create_role_from_dict(role_data)
+                    cls.roles_registry.add_role(role)
                 except Exception as e:
                     cls.logger.error(f"Failed to parse role {role_data.get('role_name', 'unknown')}: {e}")
                     continue
 
-            # Validate new configuration
-            validation_errors = new_roles_registry.validate_role_dependencies()
-            if validation_errors:
-                cls.logger.error(f"Configuration validation failed: {validation_errors}")
-                return False
+            cls.role_based_enabled = True
+            cls._load_telegram_bot_tokens()
 
-            # Atomic update: apply new configuration only if everything is valid
-            cls.logger.info(f"🔄 Hot-reload successful: {len(new_roles_registry.get_available_roles())} roles loaded")
-
-            # Store old registry for rollback
-            old_registry = cls.roles_registry
-
-            try:
-                # Update class-level variables atomically
-                cls.roles_registry = new_roles_registry
-                cls.role_based_enabled = True
-
-                # Reload tokens based on new roles
-                cls._load_telegram_bot_tokens()
-
-                # Notify all registered instances
-                cls._notify_instances_of_reload()
-
-                cls.logger.info("✅ Hot-reload completed successfully")
-                return True
-
-            except Exception as e:
-                # Rollback on any failure during update
-                cls.logger.error(f"Failed to apply hot-reload, rolling back: {e}")
-                cls.roles_registry = old_registry
-                cls.role_based_enabled = old_registry is not None
-                return False
+            cls.logger.info(f"✅ Hot-reload completed: {len(cls.roles_registry.get_available_roles())} roles loaded")
+            return True
 
         except Exception as e:
-            cls.logger.error(f"Hot-reload failed with error: {e}")
+            cls.logger.error(f"Hot-reload failed: {e}")
             return False
 
-    @classmethod
-    def _notify_instances_of_reload(cls):
-        """
-        Notify all registered instances that configuration has been reloaded.
 
-        This method should be called after successful configuration reload
-        to update instance-specific state.
-        """
-        # For now, we'll handle this through instance methods that check
-        # their configuration on-demand. In a more complex system, this would
-        # involve actual notification callbacks.
-        cls.logger.info("🔄 Notifying instances of configuration reload")
-
-        # Reset cached data in neurocrew lab instances if they exist
-        # This will cause them to reinitialize on next access
-        try:
-            from app.core.engine import NeuroCrewLab
-            # Force reinitialization of role-based components
-            if hasattr(NeuroCrewLab, '_instances'):
-                for instance in NeuroCrewLab._instances:
-                    if hasattr(instance, 'agent_coordinator'):
-                        instance.agent_coordinator._roles_cache = None
-                    if hasattr(instance, 'dialogue_orchestrator'):
-                        instance.dialogue_orchestrator._chat_role_pointers = {}
-                    if hasattr(instance, 'roles'):
-                        instance.roles = None
-            cls.logger.info("🔄 Cleared cached data in NeuroCrewLab instances")
-        except Exception as e:
-            cls.logger.warning(f"Could not clear instance caches: {e}")
-
-    @classmethod
-    def register_instance(cls, instance_id: str, callback=None):
-        """
-        Register an instance for configuration change notifications.
-
-        Args:
-            instance_id: Unique identifier for the instance
-            callback: Optional callback function to call on reload
-        """
-        # This is a placeholder for a more sophisticated notification system
-        # For now, instances check configuration on-demand rather than registering
-        pass
-
-
-# Инициализация загрузчиков при импорте
-# Config._sanitize_proxy_env() removed to respect user network configuration
-Config.load_roles()  # Сначала загружаем ролевую конфигурацию
+# Initialize
+Config.load_roles()
 if Config.is_role_based_enabled():
-    Config._load_telegram_bot_tokens()  # Затем загружаем токены на основе ролей
+    Config._load_telegram_bot_tokens()
 
 # Global configuration instance
 config = Config()

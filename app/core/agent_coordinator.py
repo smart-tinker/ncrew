@@ -143,12 +143,25 @@ class AgentCoordinator:
         enabled_roles = []
         disabled_roles = []
 
+        allow_dummy_tokens = Config.ALLOW_DUMMY_TOKENS
+
         for role in roles:
             missing = []
             if not role.cli_command or not role.cli_command.strip():
                 missing.append("cli_command")
 
-            bot_token = Config.TELEGRAM_BOT_TOKENS.get(role.telegram_bot_name)
+            bot_token = Config.TELEGRAM_BOT_TOKENS.get(role.telegram_bot_name) or getattr(
+                role, "telegram_bot_token", ""
+            )
+
+            if not bot_token and allow_dummy_tokens:
+                bot_token = f"dummy-token-{role.telegram_bot_name}"
+                Config.TELEGRAM_BOT_TOKENS[role.telegram_bot_name] = bot_token
+                if hasattr(role, "telegram_bot_token"):
+                    role.telegram_bot_token = bot_token
+                self.logger.warning(
+                    "⚠️  Using dummy token for %s (test mode)", role.telegram_bot_name
+                )
 
             if not bot_token:
                 missing.append("bot_token")
@@ -167,7 +180,16 @@ class AgentCoordinator:
                 ]
                 token_lower = bot_token.lower()
                 if any(pattern in token_lower for pattern in placeholder_patterns):
-                    missing.append("bot_token")
+                    if allow_dummy_tokens:
+                        Config.TELEGRAM_BOT_TOKENS[role.telegram_bot_name] = (
+                            f"dummy-token-{role.telegram_bot_name}"
+                        )
+                        self.logger.warning(
+                            "⚠️  Replacing placeholder token for %s (test mode)",
+                            role.telegram_bot_name,
+                        )
+                    else:
+                        missing.append("bot_token")
 
             if missing:
                 disabled_roles.append((role, missing))

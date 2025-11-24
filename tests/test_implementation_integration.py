@@ -106,7 +106,7 @@ class TestImplementationIntegration:
             role_name="test_role",
             display_name="Test Role",
             telegram_bot_name="test_bot",
-            system_prompt_file="test.md",
+            prompt_file="test.md",
             agent_type="test_agent",
             cli_command="test",
             description="Test role"
