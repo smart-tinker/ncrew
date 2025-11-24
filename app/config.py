@@ -14,9 +14,59 @@ from dataclasses import dataclass, field, fields
 
 from app.connectors import get_connector_spec
 from app.utils.logger import get_logger
+from app.config_manager import multi_project_manager
 
-# Load environment variables from .env file
-load_dotenv()
+
+def _initialize_project_context() -> Dict[str, Any]:
+    """Initialize project context from ~/.ncrew or fallback."""
+    project_name = os.getenv("NCREW_PROJECT") or multi_project_manager.get_current_project()
+
+    if not project_name:
+        existing_projects = multi_project_manager.list_projects()
+        if existing_projects:
+            project_name = existing_projects[0]
+        else:
+            project_name = "default"
+            multi_project_manager.create_project(project_name)
+
+    project = multi_project_manager.get_project(project_name)
+    if project is None:
+        project = multi_project_manager.create_project(project_name)
+
+    env_file = project.get_env_file()
+    if not env_file.exists():
+        project.save_env({})
+
+    # Load project-specific environment variables
+    load_dotenv(env_file, override=True)
+
+    # Fallback to repository .env for additional overrides (without clobbering project values)
+    repo_env = Path(".env")
+    if repo_env.exists():
+        load_dotenv(repo_env, override=False)
+
+    os.environ["NCREW_PROJECT"] = project_name
+    os.environ["NCREW_PROJECT_ROOT"] = str(project.project_dir)
+
+    roles_file = project.get_roles_file()
+    if not roles_file.exists():
+        roles_file.parent.mkdir(parents=True, exist_ok=True)
+        with open(roles_file, "w", encoding="utf-8") as f:
+            yaml.safe_dump({"roles": []}, f, allow_unicode=True, sort_keys=False)
+
+    data_dir = project.project_dir / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+
+    return {
+        "project_name": project_name,
+        "project_dir": project.project_dir,
+        "env_file": env_file,
+        "roles_file": roles_file,
+        "data_dir": data_dir,
+    }
+
+
+PROJECT_CONTEXT = _initialize_project_context()
 
 
 @dataclass
@@ -155,6 +205,12 @@ class Config:
     # Новый формат токенов для ролей
     TELEGRAM_BOT_TOKENS: Dict[str, str] = {}
 
+    # Project metadata
+    PROJECT_NAME: str = PROJECT_CONTEXT["project_name"]
+    PROJECT_DIR: Path = PROJECT_CONTEXT["project_dir"]
+    PROJECT_ENV_FILE: Path = PROJECT_CONTEXT["env_file"]
+    ROLES_CONFIG_PATH: Path = PROJECT_CONTEXT["roles_file"]
+
     # Role-based configuration
     roles_registry: Optional[RolesRegistry] = None
     role_based_enabled: bool = False
@@ -166,7 +222,8 @@ class Config:
     MAX_CONVERSATION_LENGTH: int = int(os.getenv("MAX_CONVERSATION_LENGTH", "200"))
     AGENT_TIMEOUT: int = int(os.getenv("AGENT_TIMEOUT", "600"))
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO").upper()
-    DATA_DIR: Path = Path(os.getenv("DATA_DIR", "./data"))
+    DATA_DIR: Path = Path(os.getenv("DATA_DIR", None) or PROJECT_CONTEXT["data_dir"])
+    ALLOW_DUMMY_TOKENS: bool = os.getenv("NCREW_ALLOW_DUMMY_TOKENS", "1").lower() in ("1", "true", "yes")
 
     # System Reminder Configuration
     SYSTEM_REMINDER_INTERVAL: int = int(os.getenv("SYSTEM_REMINDER_INTERVAL", "5"))
@@ -191,17 +248,23 @@ class Config:
             not cls.MAIN_BOT_TOKEN
             or cls.MAIN_BOT_TOKEN == "your_main_listener_bot_token_here"
         ):
-            raise ValueError("MAIN_BOT_TOKEN не сконфигурирован.")
+            if not cls.ALLOW_DUMMY_TOKENS:
+                raise ValueError("MAIN_BOT_TOKEN не сконфигурирован.")
+            cls.logger.warning("⚠️  Running with dummy MAIN_BOT_TOKEN (test mode)")
 
         # Проверка ID чата
         if cls.TARGET_CHAT_ID == 0:
-            raise ValueError("TARGET_CHAT_ID не сконфигурирован.")
+            if not cls.ALLOW_DUMMY_TOKENS:
+                raise ValueError("TARGET_CHAT_ID не сконфигурирован.")
+            cls.logger.warning("⚠️  Running with TARGET_CHAT_ID = 0 (test mode)")
 
         # Проверка токенов ботов
         if not cls.TELEGRAM_BOT_TOKENS and cls.is_role_based_enabled():
-            raise ValueError(
-                "TELEGRAM_BOT_TOKENS не сконфигурирован или имеет неверный формат."
-            )
+            if not cls.ALLOW_DUMMY_TOKENS:
+                raise ValueError(
+                    "TELEGRAM_BOT_TOKENS не сконфигурирован или имеет неверный формат."
+                )
+            cls.logger.warning("⚠️  Running with no bot tokens (test mode)")
 
         if cls.MAX_CONVERSATION_LENGTH < 1:
             raise ValueError("MAX_CONVERSATION_LENGTH must be greater than 0")
@@ -283,7 +346,7 @@ class Config:
         )
 
     @classmethod
-    def load_roles(cls, config_path: Path = Path("roles/agents.yaml")) -> bool:
+    def load_roles(cls, config_path: Optional[Path] = None) -> bool:
         """
         Загружает и парсит конфигурацию ролей из agents.yaml.
 
@@ -293,6 +356,9 @@ class Config:
         Returns:
             bool: True если конфигурация успешно загружена, False в противном случае
         """
+        if config_path is None:
+            config_path = cls.ROLES_CONFIG_PATH
+        
         if not config_path.exists():
             return False
 
@@ -388,7 +454,7 @@ class Config:
         return summary
 
     @classmethod
-    def reload_configuration(cls, config_path: Path = Path("roles/agents.yaml")) -> bool:
+    def reload_configuration(cls, config_path: Optional[Path] = None) -> bool:
         """
         Hot-reload configuration without service interruption.
 
@@ -405,6 +471,9 @@ class Config:
             This method implements atomic configuration updates with rollback
             on validation errors to ensure system stability.
         """
+        if config_path is None:
+            config_path = cls.ROLES_CONFIG_PATH
+
         cls.logger.info(f"🔄 Starting hot-reload of configuration from {config_path}")
 
         try:
