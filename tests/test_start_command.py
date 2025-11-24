@@ -124,7 +124,7 @@ async def test_start_command_with_real_config():
     """Test /start command with more realistic configuration."""
     # This test uses the actual config but mocks external dependencies
 
-    with patch("app.interfaces.telegram_bot.Config") as mock_config:
+    with patch("app.interfaces.telegram.telegram_bot.Config") as mock_config:
         # Setup realistic configuration
         mock_config.MAIN_BOT_TOKEN = "test_main_bot_token"
         mock_config.TARGET_CHAT_ID = 12345
@@ -133,7 +133,7 @@ async def test_start_command_with_real_config():
         mock_config.get_available_roles.return_value = []
 
         # Mock the application builder
-        with patch("app.interfaces.telegram_bot.Application.builder") as mock_app_builder:
+        with patch("app.interfaces.telegram.telegram_bot.Application.builder") as mock_app_builder:
             mock_app = MagicMock()
             mock_app_builder.return_value.build.return_value = mock_app
 

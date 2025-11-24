@@ -14,7 +14,7 @@ from dataclasses import dataclass, field, fields
 from app.connectors import get_connector_spec
 from app.utils.logger import get_logger
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 DEFAULT_ROLES_FILE = REPO_ROOT / "roles" / "agents.yaml"
 DEFAULT_PROMPTS_DIR = REPO_ROOT / "roles" / "prompts"
 
@@ -44,7 +44,7 @@ class ProjectConfig:
                 "main_bot_token": "",
                 "target_chat_id": 0,
                 "log_level": "INFO",
-                "roles": []
+                "roles": [],
             }
 
         self.save_config(config)
@@ -59,14 +59,16 @@ class ProjectConfig:
         if not config_file.exists():
             return {}
 
-        with open(config_file, 'r', encoding='utf-8') as f:
+        with open(config_file, "r", encoding="utf-8") as f:
             return yaml.safe_load(f) or {}
 
     def save_config(self, config: Dict[str, Any]):
         """Save configuration to config.yaml."""
         config_file = self.get_config_file()
-        with open(config_file, 'w', encoding='utf-8') as f:
-            yaml.safe_dump(config, f, sort_keys=False, allow_unicode=True, default_flow_style=False)
+        with open(config_file, "w", encoding="utf-8") as f:
+            yaml.safe_dump(
+                config, f, sort_keys=False, allow_unicode=True, default_flow_style=False
+            )
 
     def get_config_value(self, key: str, default: Any = None) -> Any:
         """Get configuration value."""
@@ -98,6 +100,12 @@ class MultiProjectManager:
         if not any(self.prompts_dir.glob("*.md")):
             self._copy_default_prompts()
 
+        # If no projects exist, create a default one
+        if not self.list_projects():
+            self.logger.info("No projects found. Creating 'default' project...")
+            self.create_project("default")
+            self.set_current_project("default")
+
     def get_prompts_dir(self) -> Path:
         """Get shared prompts directory."""
         return self.prompts_dir
@@ -126,7 +134,11 @@ class MultiProjectManager:
 
         projects = []
         for item in self.config_dir.iterdir():
-            if item.is_dir() and not item.name.startswith('.') and item.name != self.PROMPTS_DIR:
+            if (
+                item.is_dir()
+                and not item.name.startswith(".")
+                and item.name != self.PROMPTS_DIR
+            ):
                 # Check if it has config.yaml
                 if (item / "config.yaml").exists():
                     projects.append(item.name)
@@ -137,7 +149,9 @@ class MultiProjectManager:
         project_dir = self.config_dir / project_name
         return project_dir.exists() and (project_dir / "config.yaml").exists()
 
-    def create_project(self, project_name: str, config: Optional[Dict[str, Any]] = None) -> ProjectConfig:
+    def create_project(
+        self, project_name: str, config: Optional[Dict[str, Any]] = None
+    ) -> ProjectConfig:
         """Create new project."""
         if self.project_exists(project_name):
             raise ValueError(f"Project '{project_name}' already exists")
@@ -157,6 +171,7 @@ class MultiProjectManager:
     def delete_project(self, project_name: str):
         """Delete project."""
         import shutil
+
         project_dir = self.config_dir / project_name
         if project_dir.exists():
             shutil.rmtree(project_dir)
@@ -171,33 +186,22 @@ class MultiProjectManager:
         # Load project config.yaml
         config = project.load_config()
 
-        # Apply to environment
-        if config.get('main_bot_token'):
-            os.environ['MAIN_BOT_TOKEN'] = config['main_bot_token']
-        if config.get('target_chat_id'):
-            os.environ['TARGET_CHAT_ID'] = str(config['target_chat_id'])
-        if config.get('log_level'):
-            os.environ['LOG_LEVEL'] = config['log_level']
-
-        # Set bot tokens from roles
-        for role in config.get('roles', []):
-            if role.get('telegram_bot_token'):
-                token_var = f"{role['telegram_bot_name'].upper()}_TOKEN"
-                os.environ[token_var] = role['telegram_bot_token']
-
         self.set_current_project(project_name)
+
+        # Trigger a hot-reload in the Config class
+        Config.reload_configuration(project_name)
 
         return {
             "project_name": project_name,
             "config": config,
             "project_dir": str(project.project_dir),
-            "prompts_dir": str(self.prompts_dir)
+            "prompts_dir": str(self.prompts_dir),
         }
 
     def save_prompt(self, prompt_name: str, content: str):
         """Save a prompt file to shared prompts directory."""
         prompt_file = self.prompts_dir / f"{prompt_name}.md"
-        with open(prompt_file, 'w', encoding='utf-8') as f:
+        with open(prompt_file, "w", encoding="utf-8") as f:
             f.write(content)
         self.logger.info(f"Saved prompt: {prompt_name}")
 
@@ -206,7 +210,7 @@ class MultiProjectManager:
         prompt_file = self.prompts_dir / f"{prompt_name}.md"
         if not prompt_file.exists():
             return None
-        with open(prompt_file, 'r', encoding='utf-8') as f:
+        with open(prompt_file, "r", encoding="utf-8") as f:
             return f.read()
 
     def list_prompts(self) -> List[str]:
@@ -230,30 +234,32 @@ class MultiProjectManager:
             "main_bot_token": "",
             "target_chat_id": 0,
             "log_level": "INFO",
-            "roles": []
+            "roles": [],
         }
 
         if not DEFAULT_ROLES_FILE.exists():
             return config
 
         try:
-            with open(DEFAULT_ROLES_FILE, 'r', encoding='utf-8') as f:
+            with open(DEFAULT_ROLES_FILE, "r", encoding="utf-8") as f:
                 default_roles_data = yaml.safe_load(f)
 
-            if default_roles_data and 'roles' in default_roles_data:
-                for role in default_roles_data['roles']:
+            if default_roles_data and "roles" in default_roles_data:
+                for role in default_roles_data["roles"]:
                     role_copy = dict(role)
-                    prompt_value = role_copy.pop('system_prompt_file', '')
+                    prompt_value = role_copy.pop("system_prompt_file", "")
                     if prompt_value:
                         prompt_path = Path(prompt_value)
-                        role_copy['prompt_file'] = prompt_path.name
+                        role_copy["prompt_file"] = prompt_path.name
                     else:
-                        role_copy['prompt_file'] = ''
+                        role_copy["prompt_file"] = ""
 
-                    role_copy.setdefault('telegram_bot_token', '')
-                    config['roles'].append(role_copy)
+                    role_copy.setdefault("telegram_bot_token", "")
+                    config["roles"].append(role_copy)
 
-                self.logger.info(f"Seeded {len(config['roles'])} roles from repository defaults")
+                self.logger.info(
+                    f"Seeded {len(config['roles'])} roles from repository defaults"
+                )
         except Exception as e:
             self.logger.warning(f"Could not seed roles from repository: {e}")
 
@@ -263,44 +269,29 @@ class MultiProjectManager:
 # Global instance
 multi_project_manager = MultiProjectManager()
 
+
 def _initialize_project_context() -> Dict[str, Any]:
     """Initialize project context from ~/.ncrew/."""
-    project_name = os.getenv("NCREW_PROJECT") or multi_project_manager.get_current_project()
+    project_name = (
+        os.getenv("NCREW_PROJECT") or multi_project_manager.get_current_project()
+    )
 
     if not project_name:
-        existing_projects = multi_project_manager.list_projects()
-        if existing_projects:
-            project_name = existing_projects[0]
-        else:
-            project_name = "default"
-            multi_project_manager.create_project(project_name)
+        project_name = "default"
 
     project = multi_project_manager.get_project(project_name)
     if project is None:
-        project = multi_project_manager.create_project(project_name)
+        raise FileNotFoundError(
+            f"Project '{project_name}' not found and could not be created."
+        )
 
     # Load config.yaml
     config = project.load_config()
-
-    # Apply to environment
-    if config.get('main_bot_token'):
-        os.environ['MAIN_BOT_TOKEN'] = config['main_bot_token']
-    if config.get('target_chat_id'):
-        os.environ['TARGET_CHAT_ID'] = str(config['target_chat_id'])
-    if config.get('log_level'):
-        os.environ['LOG_LEVEL'] = config['log_level']
-
-    # Set bot tokens from roles
-    for role in config.get('roles', []):
-        if role.get('telegram_bot_token'):
-            token_var = f"{role['telegram_bot_name'].upper()}_TOKEN"
-            os.environ[token_var] = role['telegram_bot_token']
-
-    os.environ["NCREW_PROJECT"] = project_name
-    os.environ["NCREW_PROJECT_ROOT"] = str(project.project_dir)
-
     data_dir = project.project_dir / "data"
     data_dir.mkdir(parents=True, exist_ok=True)
+
+    # Set project name to environment for external tools
+    os.environ["NCREW_PROJECT"] = project_name
 
     return {
         "project_name": project_name,
@@ -309,6 +300,13 @@ def _initialize_project_context() -> Dict[str, Any]:
         "config": config,
         "data_dir": data_dir,
         "prompts_dir": multi_project_manager.get_prompts_dir(),
+        # Directly pass config values
+        "main_bot_token": config.get("main_bot_token", ""),
+        "target_chat_id": int(config.get("target_chat_id", 0)),
+        "log_level": config.get("log_level", "INFO").upper(),
+        "max_conversation_length": int(config.get("max_conversation_length", 200)),
+        "agent_timeout": int(config.get("agent_timeout", 600)),
+        "system_reminder_interval": int(config.get("system_reminder_interval", 5)),
     }
 
 
@@ -339,14 +337,14 @@ class RoleConfig:
     def __post_init__(self):
         """Валидация и пост-обработка после инициализации."""
         connector_spec = get_connector_spec(self.agent_type)
-        
+
         if not self.role_name:
             raise ValueError("role_name is required")
         if not self.telegram_bot_name:
             raise ValueError("telegram_bot_name is required")
         if not self.agent_type:
             raise ValueError("agent_type is required")
-        if (not self.cli_command) and (not connector_spec or connector_spec.requires_cli):
+        if not self.cli_command and (not connector_spec or connector_spec.requires_cli):
             raise ValueError("cli_command is required")
 
         # Путь к промпту в ~/.ncrew/prompts/
@@ -356,10 +354,7 @@ class RoleConfig:
 
     def get_bot_token(self) -> Optional[str]:
         """Получает токен для Telegram бота этой роли."""
-        # Сначала из конфига роли, потом из словаря
-        if self.telegram_bot_token:
-            return self.telegram_bot_token
-        return Config.TELEGRAM_BOT_TOKENS.get(self.telegram_bot_name)
+        return self.telegram_bot_token
 
     def __str__(self) -> str:
         return f"Role({self.role_name}: {self.display_name})"
@@ -394,7 +389,7 @@ class RolesRegistry:
 
         for role_name, role in self.roles.items():
             connector_spec = get_connector_spec(role.agent_type)
-            
+
             # Проверяем наличие файла промпта
             if role.system_prompt_path and not role.system_prompt_path.exists():
                 errors.append(
@@ -411,7 +406,9 @@ class RolesRegistry:
             if not role.agent_type:
                 errors.append(f"Role '{role_name}': agent_type is missing")
             elif not connector_spec:
-                errors.append(f"Role '{role_name}': Unknown agent_type '{role.agent_type}'")
+                errors.append(
+                    f"Role '{role_name}': Unknown agent_type '{role.agent_type}'"
+                )
 
             # Проверяем cli_command
             requires_cli = connector_spec.requires_cli if connector_spec else True
@@ -433,9 +430,9 @@ class Config:
 
     logger = get_logger("Config")
 
-    # From config.yaml
-    MAIN_BOT_TOKEN: str = os.getenv("MAIN_BOT_TOKEN", "")
-    TARGET_CHAT_ID: int = int(os.getenv("TARGET_CHAT_ID", "0"))
+    # From config.yaml (via PROJECT_CONTEXT)
+    MAIN_BOT_TOKEN: str = PROJECT_CONTEXT["main_bot_token"]
+    TARGET_CHAT_ID: int = PROJECT_CONTEXT["target_chat_id"]
     TELEGRAM_BOT_TOKENS: Dict[str, str] = {}
 
     # Project metadata
@@ -449,13 +446,15 @@ class Config:
     role_based_enabled: bool = False
 
     # System Configuration
-    MAX_CONVERSATION_LENGTH: int = int(os.getenv("MAX_CONVERSATION_LENGTH", "200"))
-    AGENT_TIMEOUT: int = int(os.getenv("AGENT_TIMEOUT", "600"))
-    LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO").upper()
+    MAX_CONVERSATION_LENGTH: int = PROJECT_CONTEXT["max_conversation_length"]
+    AGENT_TIMEOUT: int = PROJECT_CONTEXT["agent_timeout"]
+    LOG_LEVEL: str = PROJECT_CONTEXT["log_level"]
     DATA_DIR: Path = Path(PROJECT_CONTEXT["data_dir"])
-    ALLOW_DUMMY_TOKENS: bool = os.getenv("NCREW_ALLOW_DUMMY_TOKENS", "1").lower() in ("1", "true", "yes")
+    ALLOW_DUMMY_TOKENS: bool = (
+        os.getenv("NCREW_ALLOW_DUMMY_TOKENS", "1").lower() in ("1", "true", "yes")
+    )
 
-    SYSTEM_REMINDER_INTERVAL: int = int(os.getenv("SYSTEM_REMINDER_INTERVAL", "5"))
+    SYSTEM_REMINDER_INTERVAL: int = PROJECT_CONTEXT["system_reminder_interval"]
 
     # Telegram Configuration
     TELEGRAM_MAX_MESSAGE_LENGTH: int = 4096
@@ -464,7 +463,10 @@ class Config:
     @classmethod
     def validate(cls) -> bool:
         """Validate critical configuration settings."""
-        if not cls.MAIN_BOT_TOKEN or cls.MAIN_BOT_TOKEN == "your_main_listener_bot_token_here":
+        if (
+            not cls.MAIN_BOT_TOKEN
+            or cls.MAIN_BOT_TOKEN == "your_main_listener_bot_token_here"
+        ):
             if not cls.ALLOW_DUMMY_TOKENS:
                 raise ValueError("MAIN_BOT_TOKEN не сконфигурирован.")
             cls.logger.warning("⚠️  Running with dummy MAIN_BOT_TOKEN (test mode)")
@@ -527,7 +529,7 @@ class Config:
                 continue
 
             # Токен может быть в самой роли или в переменных окружения
-            token = role.telegram_bot_token or os.getenv(f"{role.telegram_bot_name.upper()}_TOKEN")
+            token = role.telegram_bot_token
 
             if token:
                 token_dict[role.telegram_bot_name] = token
@@ -537,7 +539,9 @@ class Config:
                 cls.logger.warning(f"Token not found for {role.telegram_bot_name}")
 
         cls.TELEGRAM_BOT_TOKENS = token_dict
-        cls.logger.info(f"Token loading completed: {loaded_count}/{len(loaded_roles)} tokens loaded")
+        cls.logger.info(
+            f"Token loading completed: {loaded_count}/{len(loaded_roles)} tokens loaded"
+        )
 
     @classmethod
     def load_roles(cls) -> bool:
@@ -549,7 +553,7 @@ class Config:
                 return False
 
             config = project.load_config()
-            
+
             if not config or "roles" not in config:
                 cls.logger.warning("No roles in config.yaml")
                 cls.roles_registry = RolesRegistry()
@@ -563,7 +567,9 @@ class Config:
                     role = create_role_from_dict(role_data)
                     cls.roles_registry.add_role(role)
                 except Exception as e:
-                    cls.logger.error(f"Error loading role {role_data.get('role_name', 'unknown')}: {e}")
+                    cls.logger.error(
+                        f"Error loading role {role_data.get('role_name', 'unknown')}: {e}"
+                    )
                     continue
 
             cls.role_based_enabled = True
@@ -629,47 +635,68 @@ class Config:
         return summary
 
     @classmethod
-    def reload_configuration(cls) -> bool:
-        """Hot-reload configuration from config.yaml."""
-        cls.logger.info("🔄 Starting hot-reload of configuration")
+    def reload_configuration(cls, project_name: str) -> bool:
+        """Hot-reload configuration for a new project."""
+        cls.logger.info(
+            f"🔄 Switching project and reloading configuration to '{project_name}'..."
+        )
+
+        global PROJECT_CONTEXT
 
         try:
-            project = multi_project_manager.get_project(cls.PROJECT_NAME)
+            # Re-initialize project context for the new project
+            os.environ["NCREW_PROJECT"] = project_name
+            project = multi_project_manager.get_project(project_name)
             if not project:
-                cls.logger.error(f"Project {cls.PROJECT_NAME} not found")
+                cls.logger.error(f"Project '{project_name}' not found during reload.")
                 return False
 
             config = project.load_config()
+            data_dir = project.project_dir / "data"
+            data_dir.mkdir(parents=True, exist_ok=True)
 
-            # Apply to environment
-            if config.get('main_bot_token'):
-                os.environ['MAIN_BOT_TOKEN'] = config['main_bot_token']
-                cls.MAIN_BOT_TOKEN = config['main_bot_token']
-            
-            if config.get('target_chat_id'):
-                os.environ['TARGET_CHAT_ID'] = str(config['target_chat_id'])
-                cls.TARGET_CHAT_ID = config['target_chat_id']
+            PROJECT_CONTEXT = {
+                "project_name": project_name,
+                "project_dir": project.project_dir,
+                "config_file": project.get_config_file(),
+                "config": config,
+                "data_dir": data_dir,
+                "prompts_dir": multi_project_manager.get_prompts_dir(),
+                "main_bot_token": config.get("main_bot_token", ""),
+                "target_chat_id": int(config.get("target_chat_id", 0)),
+                "log_level": config.get("log_level", "INFO").upper(),
+                "max_conversation_length": int(
+                    config.get("max_conversation_length", 200)
+                ),
+                "agent_timeout": int(config.get("agent_timeout", 600)),
+                "system_reminder_interval": int(
+                    config.get("system_reminder_interval", 5)
+                ),
+            }
 
-            # Reload roles
-            old_registry = cls.roles_registry
-            cls.roles_registry = RolesRegistry()
+            # Update Config class attributes
+            cls.PROJECT_NAME = PROJECT_CONTEXT["project_name"]
+            cls.MAIN_BOT_TOKEN = PROJECT_CONTEXT["main_bot_token"]
+            cls.TARGET_CHAT_ID = PROJECT_CONTEXT["target_chat_id"]
+            cls.LOG_LEVEL = PROJECT_CONTEXT["log_level"]
+            cls.MAX_CONVERSATION_LENGTH = PROJECT_CONTEXT["max_conversation_length"]
+            cls.AGENT_TIMEOUT = PROJECT_CONTEXT["agent_timeout"]
+            cls.SYSTEM_REMINDER_INTERVAL = PROJECT_CONTEXT["system_reminder_interval"]
+            cls.DATA_DIR = Path(PROJECT_CONTEXT["data_dir"])
 
-            for role_data in config.get("roles", []):
-                try:
-                    role = create_role_from_dict(role_data)
-                    cls.roles_registry.add_role(role)
-                except Exception as e:
-                    cls.logger.error(f"Failed to parse role {role_data.get('role_name', 'unknown')}: {e}")
-                    continue
-
-            cls.role_based_enabled = True
+            # Reload roles and tokens
+            cls.load_roles()
             cls._load_telegram_bot_tokens()
 
-            cls.logger.info(f"✅ Hot-reload completed: {len(cls.roles_registry.get_available_roles())} roles loaded")
+            cls.logger.info(
+                f"✅ Hot-reload to '{project_name}' completed: {len(cls.get_available_roles())} roles loaded."
+            )
             return True
 
         except Exception as e:
             cls.logger.error(f"Hot-reload failed: {e}")
+            # Restore previous project name if reload fails
+            os.environ["NCREW_PROJECT"] = cls.PROJECT_NAME
             return False
 
 
