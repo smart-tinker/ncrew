@@ -59,22 +59,21 @@ class NeuroCrewLab:
             max_sessions_per_chat=5,
             max_cached_conversations=100,
             session_timeout_minutes=30,
-            context_cache_ttl=3600
+            context_cache_ttl=3600,
         )
         self.port_manager = PortManager(
             max_pooled_connections=20,
             max_connections_per_role=3,
             connection_timeout_seconds=int(Config.AGENT_TIMEOUT),
             health_check_interval=60,
-            cleanup_interval=300
+            cleanup_interval=300,
         )
 
         # Initialize coordinators (dependency injection pattern)
         self.agent_coordinator = AgentCoordinator(self.port_manager)
         self.session_manager = SessionManager(self.storage, self.memory_manager)
         self.dialogue_orchestrator = DialogueOrchestrator(
-            self.agent_coordinator,
-            self.session_manager
+            self.agent_coordinator, self.session_manager
         )
 
         # Legacy compatibility properties
@@ -139,11 +138,7 @@ class NeuroCrewLab:
                 f"Initialized {len(self.roles)} validated roles ready for stateful execution"
             )
 
-    @handle_errors(
-        logger=None,
-        context="message_processing",
-        return_on_error=None
-    )
+    @handle_errors(logger=None, context="message_processing", return_on_error=None)
     async def handle_message(
         self, chat_id: int, user_text: str
     ) -> AsyncGenerator[Tuple[Optional[RoleConfig], str], None]:
@@ -165,7 +160,9 @@ class NeuroCrewLab:
             self._conversations_cleared = True
 
         # Delegate to dialogue orchestrator
-        async for result in self.dialogue_orchestrator.handle_message(chat_id, user_text):
+        async for result in self.dialogue_orchestrator.handle_message(
+            chat_id, user_text
+        ):
             yield result
 
     # ===== LEGACY COMPATIBILITY DELEGATIONS =====
@@ -174,7 +171,7 @@ class NeuroCrewLab:
     @handle_errors(
         logger=None,
         context="conversation_reset",
-        return_on_error="❌ Failed to reset conversation"
+        return_on_error="❌ Failed to reset conversation",
     )
     async def reset_conversation(self, chat_id: int) -> str:
         """
@@ -194,17 +191,6 @@ class NeuroCrewLab:
         # Reset role pointers via dialogue orchestrator
         await self.dialogue_orchestrator.reset_chat_role_pointer(chat_id)
 
-        # Clear compatibility caches for this chat
-        if hasattr(self, '_role_last_seen_index_cache'):
-            keys_to_remove = [key for key in self._role_last_seen_index_cache.keys() if key[0] == chat_id]
-            for key in keys_to_remove:
-                del self._role_last_seen_index_cache[key]
-
-        if hasattr(self, '_connector_sessions_cache'):
-            keys_to_remove = [key for key in self._connector_sessions_cache.keys() if key[0] == chat_id]
-            for key in keys_to_remove:
-                del self._connector_sessions_cache[key]
-
         return result
 
     async def get_agent_status(self) -> Dict[str, bool]:
@@ -218,11 +204,7 @@ class NeuroCrewLab:
         """
         return await self.agent_coordinator.get_agent_status()
 
-    @handle_errors(
-        logger=None,
-        context="conversation_stats",
-        return_on_error={}
-    )
+    @handle_errors(logger=None, context="conversation_stats", return_on_error={})
     async def get_conversation_stats(self, chat_id: int) -> Dict[str, Any]:
         """
         Get statistics for a conversation.
@@ -237,11 +219,7 @@ class NeuroCrewLab:
         """
         return await self.session_manager.get_conversation_stats(chat_id)
 
-    @handle_errors(
-        logger=None,
-        context="system_status",
-        return_on_error={}
-    )
+    @handle_errors(logger=None, context="system_status", return_on_error={})
     async def get_system_status(self) -> Dict[str, Any]:
         """
         Get overall system status.
@@ -267,13 +245,11 @@ class NeuroCrewLab:
             "total_messages": storage_stats.get("total_messages", 0),
             "storage_size_mb": storage_stats.get("total_size_mb", 0),
             "agent_details": agent_status,
-
             # Memory Manager stats
             "active_sessions": memory_stats["active_sessions"],
             "total_sessions": memory_stats["total_sessions"],
             "cached_conversations": memory_stats["cached_conversations"],
             "memory_usage_mb": memory_stats["memory_usage_mb"],
-
             # Port Manager stats
             "active_connections": port_stats.active_connections,
             "total_connections": port_stats.total_connections,
@@ -287,7 +263,12 @@ class NeuroCrewLab:
     @handle_errors(
         logger=None,
         context="health_check",
-        return_on_error={"storage_ok": False, "roles_ok": False, "agents_available": False, "stateful_sessions_ok": False}
+        return_on_error={
+            "storage_ok": False,
+            "roles_ok": False,
+            "agents_available": False,
+            "stateful_sessions_ok": False,
+        },
     )
     async def health_check(self) -> Dict[str, bool]:
         """
@@ -395,7 +376,9 @@ class NeuroCrewLab:
         Returns:
             bool: True if successful
         """
-        return await self.dialogue_orchestrator.set_agent_sequence(chat_id, role_sequence)
+        return await self.dialogue_orchestrator.set_agent_sequence(
+            chat_id, role_sequence
+        )
 
     async def skip_to_next_agent(self, chat_id: int) -> Optional[str]:
         """
@@ -419,7 +402,9 @@ class NeuroCrewLab:
     ) -> AsyncGenerator[Tuple[RoleConfig, str], None]:
         """Perform introductions sequentially (one agent at a time)."""
         for i, role in enumerate(self.roles):
-            self.logger.info(f"Introducing role {i+1}/{len(self.roles)}: {role.role_name}...")
+            self.logger.info(
+                f"Introducing role {i + 1}/{len(self.roles)}: {role.role_name}..."
+            )
             connector = None
             introduction_text = (
                 f"Error: Could not get introduction from {role.display_name}."
@@ -430,7 +415,9 @@ class NeuroCrewLab:
                 target_chat_id = Config.TARGET_CHAT_ID or system_chat_id
 
                 # Create or get existing session for the role with REAL chat_id
-                connector = await self.agent_coordinator.get_or_create_connector(target_chat_id, role)
+                connector = await self.agent_coordinator.get_or_create_connector(
+                    target_chat_id, role
+                )
 
                 # Only shutdown if connector exists and we need to reset context for fresh introduction
                 if connector.is_alive():
@@ -438,7 +425,9 @@ class NeuroCrewLab:
 
                 # Launch the agent and get its introduction
                 await connector.launch(role.cli_command, role.system_prompt)
-                self.logger.info(f"Launched {role.role_name} for introduction with chat_id={target_chat_id}.")
+                self.logger.info(
+                    f"Launched {role.role_name} for introduction with chat_id={target_chat_id}."
+                )
 
                 # Use shorter timeout for introductions (they should be quick)
                 original_timeout = getattr(connector, "request_timeout", None)
@@ -540,7 +529,9 @@ class NeuroCrewLab:
     async def _clear_all_conversations_on_restart(self):
         """Clear all conversation histories on application restart to ensure fresh session."""
         try:
-            self.logger.info("🔄 Clearing all conversation histories for new session...")
+            self.logger.info(
+                "🔄 Clearing all conversation histories for new session..."
+            )
 
             # Get all conversation stats from memory manager
             all_stats = self.memory_manager.get_all_conversation_stats()
@@ -553,9 +544,13 @@ class NeuroCrewLab:
                     cleared_count += 1
                     self.logger.debug(f"Cleared conversation for chat {chat_id}")
                 else:
-                    self.logger.warning(f"Failed to clear conversation for chat {chat_id}")
+                    self.logger.warning(
+                        f"Failed to clear conversation for chat {chat_id}"
+                    )
 
-            self.logger.info(f"✅ Cleared {cleared_count}/{len(all_chat_ids)} conversation histories for new session")
+            self.logger.info(
+                f"✅ Cleared {cleared_count}/{len(all_chat_ids)} conversation histories for new session"
+            )
 
         except Exception as e:
             self.logger.error(f"Error clearing conversation histories on restart: {e}")
@@ -563,11 +558,6 @@ class NeuroCrewLab:
             pass
 
     # ===== LEGACY PROPERTIES FOR BACKWARD COMPATIBILITY =====
-
-    @property
-    def chat_role_pointers(self) -> Dict[int, int]:
-        """Legacy property - delegates to dialogue orchestrator."""
-        return self.dialogue_orchestrator.chat_role_pointers
 
     @property
     def is_role_based(self) -> bool:
@@ -578,41 +568,6 @@ class NeuroCrewLab:
     def role_introductions(self) -> Dict[str, str]:
         """Legacy property - returns empty dict for compatibility."""
         return {}
-
-    @property
-    def role_last_seen_index(self) -> Dict[Tuple[int, str], int]:
-        """Legacy property for role context tracking - delegates to memory manager."""
-        # For test compatibility, maintain a simple dictionary that can be manipulated
-        if not hasattr(self, '_role_last_seen_index_cache'):
-            self._role_last_seen_index_cache = {}
-
-        # Try to sync with actual memory manager if possible
-        try:
-            sessions = self.memory_manager.sessions
-            for (chat_id, role_name), session_info in sessions.items():
-                if session_info.is_active:
-                    index = self.memory_manager.get_context_index(chat_id, role_name)
-                    self._role_last_seen_index_cache[(chat_id, role_name)] = index
-        except Exception:
-            pass  # Ignore sync errors, use cached values
-
-        return self._role_last_seen_index_cache
-
-    @role_last_seen_index.setter
-    def role_last_seen_index(self, value: Dict[Tuple[int, str], int]):
-        """Legacy setter for role context tracking - delegates to memory manager."""
-        # Store the values for test compatibility
-        if not hasattr(self, '_role_last_seen_index_cache'):
-            self._role_last_seen_index_cache = {}
-
-        self._role_last_seen_index_cache = value.copy()
-
-        # Also try to set in the actual memory manager
-        try:
-            for (chat_id, role_name), index in value.items():
-                self.memory_manager.set_context_index(chat_id, role_name, index)
-        except Exception as e:
-            self.logger.warning(f"Error setting role_last_seen_index: {e}")
 
     # ===== LEGACY METHODS FOR BACKWARD COMPATIBILITY =====
 
@@ -633,23 +588,10 @@ class NeuroCrewLab:
         # The dialogue_orchestrator._process_with_role() calls session_manager.add_agent_message()
         # which handles increment_context_index automatically. No manual increment needed here.
 
-        # Update compatibility cache for legacy code that might still access it
-        try:
-            if hasattr(self, '_role_last_seen_index_cache'):
-                # Get current index for cache consistency (don't increment here)
-                current_index = self.memory_manager.get_context_index(chat_id, role.role_name)
-                self._role_last_seen_index_cache[(chat_id, role.role_name)] = current_index
-        except Exception:
-            # Ignore any errors in compatibility layer
-            pass
-
         return response
 
     def _format_conversation_for_role(
-        self,
-        conversation: List[Dict[str, Any]],
-        role: RoleConfig,
-        chat_id: int
+        self, conversation: List[Dict[str, Any]], role: RoleConfig, chat_id: int
     ) -> Tuple[str, bool]:
         """
         Legacy method - delegates to dialogue orchestrator.
@@ -666,7 +608,9 @@ class NeuroCrewLab:
             conversation, role, chat_id
         )
 
-    async def _get_or_create_role_connector(self, chat_id: int, role: RoleConfig) -> BaseConnector:
+    async def _get_or_create_role_connector(
+        self, chat_id: int, role: RoleConfig
+    ) -> BaseConnector:
         """
         Legacy method - delegates to agent coordinator.
 
@@ -680,40 +624,3 @@ class NeuroCrewLab:
         # For test compatibility, this method should not be called directly
         # Tests should mock agent_coordinator.get_or_create_connector instead
         raise NotImplementedError("This method should be mocked in tests")
-
-    @property
-    def connector_sessions(self) -> Dict[Tuple[int, str], BaseConnector]:
-        """Legacy property - delegates to agent coordinator for compatibility."""
-        # The agent coordinator now handles connector lifecycle internally
-        # This is a compatibility wrapper that provides a mutable dict for tests
-        if not hasattr(self, '_connector_sessions_cache'):
-            self._connector_sessions_cache = {}
-        return self._connector_sessions_cache
-
-    async def _reset_chat_role_sessions(self, chat_id: int):
-        """
-        Legacy method - resets role sessions for a specific chat.
-
-        Args:
-            chat_id: Chat ID to reset sessions for
-        """
-        # In the new architecture, this is handled by the session manager
-        # This is a compatibility method for tests
-        try:
-            # Clear cached role last seen indexes for this chat
-            if hasattr(self, '_role_last_seen_index_cache'):
-                keys_to_remove = [key for key in self._role_last_seen_index_cache.keys() if key[0] == chat_id]
-                for key in keys_to_remove:
-                    del self._role_last_seen_index_cache[key]
-
-            # Clear connector sessions for this chat
-            if hasattr(self, '_connector_sessions_cache'):
-                keys_to_remove = [key for key in self._connector_sessions_cache.keys() if key[0] == chat_id]
-                for key in keys_to_remove:
-                    del self._connector_sessions_cache[key]
-
-            # Clear session pointers in dialogue orchestrator
-            self.dialogue_orchestrator.chat_role_pointers.pop(chat_id, None)
-
-        except Exception as e:
-            self.logger.warning(f"Error resetting chat role sessions: {e}")

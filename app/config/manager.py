@@ -21,58 +21,60 @@ DEFAULT_PROMPTS_DIR = REPO_ROOT / "roles" / "prompts"
 
 class ProjectConfig:
     """Configuration for a single project."""
-    
+
     def __init__(self, project_name: str, config_dir: Path):
         self.project_name = project_name
         self.config_dir = config_dir
-        self.project_dir = config_dir / project_name
+        self.project_dir = config_dir / "projects" / project_name
         self.logger = get_logger(f"ProjectConfig.{project_name}")
-        
+
     def exists(self) -> bool:
         """Check if project directory exists."""
         return self.project_dir.exists()
-    
+
     def create(self, config: Optional[Dict[str, Any]] = None):
         """Create project directory with default config.yaml."""
         self.project_dir.mkdir(parents=True, exist_ok=True)
         (self.project_dir / "data").mkdir(exist_ok=True)
         (self.project_dir / "data" / "conversations").mkdir(exist_ok=True)
-        
+
         # Create default config.yaml
         if config is None:
             config = {
                 "main_bot_token": "dummy_token_for_testing",
                 "target_chat_id": 0,
                 "log_level": "INFO",
-                "roles": []
+                "roles": [],
             }
-        
+
         self.save_config(config)
-    
+
     def get_config_file(self) -> Path:
         """Get path to project config.yaml file."""
         return self.project_dir / "config.yaml"
-    
+
     def load_config(self) -> Dict[str, Any]:
         """Load configuration from config.yaml."""
         config_file = self.get_config_file()
         if not config_file.exists():
             return {}
-        
-        with open(config_file, 'r', encoding='utf-8') as f:
+
+        with open(config_file, "r", encoding="utf-8") as f:
             return yaml.safe_load(f) or {}
-    
+
     def save_config(self, config: Dict[str, Any]):
         """Save configuration to config.yaml."""
         config_file = self.get_config_file()
-        with open(config_file, 'w', encoding='utf-8') as f:
-            yaml.safe_dump(config, f, sort_keys=False, allow_unicode=True, default_flow_style=False)
-    
+        with open(config_file, "w", encoding="utf-8") as f:
+            yaml.safe_dump(
+                config, f, sort_keys=False, allow_unicode=True, default_flow_style=False
+            )
+
     def get_config_value(self, key: str, default: Any = None) -> Any:
         """Get configuration value."""
         config = self.load_config()
         return config.get(key, default)
-    
+
     def set_config_value(self, key: str, value: Any):
         """Set configuration value."""
         config = self.load_config()
@@ -82,87 +84,161 @@ class ProjectConfig:
 
 class MultiProjectManager:
     """Manager for multiple NeuroCrew projects."""
-    
+
     DEFAULT_CONFIG_DIR = Path.home() / ".ncrew"
     CURRENT_PROJECT_FILE = "current_project.txt"
     PROMPTS_DIR = "prompts"
-    
+
     def __init__(self, config_dir: Optional[Path] = None):
         self.config_dir = config_dir or self.DEFAULT_CONFIG_DIR
         self.config_dir.mkdir(parents=True, exist_ok=True)
+        self.logger = get_logger("MultiProjectManager")
+
+        # Always initialize app structure on startup
+        self._initialize_app_structure()
+
+    def _initialize_app_structure(self):
+        """Initialize the application directory structure on first run."""
+        # Only initialize if ~/.ncrew doesn't exist (fresh install)
+        if self.config_dir.exists():
+            self.logger.debug(
+                "Application directory already exists, skipping initialization"
+            )
+            # Still need to set up prompts_dir for existing functionality
+            self.prompts_dir = self.config_dir / self.PROMPTS_DIR
+            self.prompts_dir.mkdir(exist_ok=True)
+            return
+
+        self.logger.info("Initializing fresh NeuroCrew installation...")
+
+        # Create app_config.yaml
+        app_config_file = self.config_dir / "app_config.yaml"
+        app_config = {
+            "version": "1.0",
+            "first_run": True,
+            "web_port": 8080,
+            "log_level": "INFO",
+        }
+        with open(app_config_file, "w", encoding="utf-8") as f:
+            yaml.safe_dump(
+                app_config,
+                f,
+                sort_keys=False,
+                allow_unicode=True,
+                default_flow_style=False,
+            )
+
+        # Copy default roles
+        self.logger.info("Setting up default roles...")
+        self._copy_default_roles()
+
+        # Create projects directory (empty)
+        projects_dir = self.config_dir / "projects"
+        projects_dir.mkdir(exist_ok=True)
+
+        # Create .gitkeep in projects
+        (projects_dir / ".gitkeep").write_text("")
+
+        # Initialize prompts directory
         self.prompts_dir = self.config_dir / self.PROMPTS_DIR
         self.prompts_dir.mkdir(exist_ok=True)
-        self.logger = get_logger("MultiProjectManager")
-        
-        # Copy default prompts if prompts_dir is empty
-        if not any(self.prompts_dir.glob("*.md")):
-            self._copy_default_prompts()
 
-        # If no projects exist, create a default one
-        if not self.list_projects():
-            self.logger.info("No projects found. Creating 'default' project...")
-            self.create_project("default")
-            self.set_current_project("default")
-    
+        self.logger.info("NeuroCrew installation completed!")
+
+    def _copy_default_roles(self):
+        """Copy default roles from templates to ~/.ncrew/roles/."""
+        import shutil
+        from pathlib import Path
+
+        repo_root = Path(__file__).resolve().parent.parent.parent
+        default_roles_dir = repo_root / "templates" / "roles"
+
+        if not default_roles_dir.exists():
+            self.logger.warning("Default roles directory not found in templates/")
+            return
+
+        target_roles_dir = self.config_dir / "roles"
+        target_roles_dir.mkdir(parents=True, exist_ok=True)
+
+        # Copy agents.yaml
+        agents_file = default_roles_dir / "agents.yaml"
+        if agents_file.exists():
+            shutil.copy2(agents_file, target_roles_dir / "agents.yaml")
+
+        # Copy prompts
+        prompts_dir = default_roles_dir / "prompts"
+        target_prompts_dir = target_roles_dir / "prompts"
+        target_prompts_dir.mkdir(exist_ok=True)
+
+        if prompts_dir.exists():
+            for prompt_file in prompts_dir.glob("*.md"):
+                shutil.copy2(prompt_file, target_prompts_dir / prompt_file.name)
+
+        self.logger.info(f"Copied default roles to {target_roles_dir}")
+
     def get_prompts_dir(self) -> Path:
         """Get shared prompts directory."""
         return self.prompts_dir
-    
+
     def get_current_project_file(self) -> Path:
         """Get path to file storing current project name."""
         return self.config_dir / self.CURRENT_PROJECT_FILE
-    
+
     def get_current_project(self) -> Optional[str]:
         """Get name of currently active project."""
         project_file = self.get_current_project_file()
         if not project_file.exists():
             return None
         return project_file.read_text().strip()
-    
+
     def set_current_project(self, project_name: str):
         """Set currently active project."""
         project_file = self.get_current_project_file()
         project_file.write_text(project_name)
         self.logger.info(f"Set current project to: {project_name}")
-    
+
     def list_projects(self) -> List[str]:
         """List all available projects."""
-        if not self.config_dir.exists():
+        projects_dir = self.config_dir / "projects"
+        if not projects_dir.exists():
             return []
-        
+
         projects = []
-        for item in self.config_dir.iterdir():
-            if item.is_dir() and not item.name.startswith('.') and item.name != self.PROMPTS_DIR:
+        for item in projects_dir.iterdir():
+            if item.is_dir() and not item.name.startswith("."):
                 # Check if it has config.yaml
                 if (item / "config.yaml").exists():
                     projects.append(item.name)
         return sorted(projects)
-    
+
     def project_exists(self, project_name: str) -> bool:
         """Check if project exists."""
-        project_dir = self.config_dir / project_name
+        project_dir = self.config_dir / "projects" / project_name
         return project_dir.exists() and (project_dir / "config.yaml").exists()
-    
-    def create_project(self, project_name: str, config: Optional[Dict[str, Any]] = None) -> ProjectConfig:
+
+    def create_project(
+        self, project_name: str, config: Optional[Dict[str, Any]] = None
+    ) -> ProjectConfig:
         """Create new project."""
         if self.project_exists(project_name):
             raise ValueError(f"Project '{project_name}' already exists")
-        
+
         project = ProjectConfig(project_name, self.config_dir)
         project.create(config or self._build_default_project_config())
-        
+
         self.logger.info(f"Created new project: {project_name}")
         return project
-    
+
     def get_project(self, project_name: str) -> Optional[ProjectConfig]:
         """Get project configuration."""
         if not self.project_exists(project_name):
             return None
         return ProjectConfig(project_name, self.config_dir)
-    
+
     def delete_project(self, project_name: str):
         """Delete project."""
         import shutil
+
         project_dir = self.config_dir / project_name
         if project_dir.exists():
             shutil.rmtree(project_dir)
@@ -171,6 +247,7 @@ class MultiProjectManager:
     def load_project_config(self, project_name: str) -> Dict[str, Any]:
         """Load project configuration and apply to environment."""
         from app.config import Config
+
         project = self.get_project(project_name)
         if not project:
             raise ValueError(f"Project '{project_name}' not found")
@@ -187,13 +264,13 @@ class MultiProjectManager:
             "project_name": project_name,
             "config": config,
             "project_dir": str(project.project_dir),
-            "prompts_dir": str(self.prompts_dir)
+            "prompts_dir": str(self.prompts_dir),
         }
 
     def save_prompt(self, prompt_name: str, content: str):
         """Save a prompt file to shared prompts directory."""
         prompt_file = self.prompts_dir / f"{prompt_name}.md"
-        with open(prompt_file, 'w', encoding='utf-8') as f:
+        with open(prompt_file, "w", encoding="utf-8") as f:
             f.write(content)
         self.logger.info(f"Saved prompt: {prompt_name}")
 
@@ -202,7 +279,7 @@ class MultiProjectManager:
         prompt_file = self.prompts_dir / f"{prompt_name}.md"
         if not prompt_file.exists():
             return None
-        with open(prompt_file, 'r', encoding='utf-8') as f:
+        with open(prompt_file, "r", encoding="utf-8") as f:
             return f.read()
 
     def list_prompts(self) -> List[str]:
@@ -219,40 +296,42 @@ class MultiProjectManager:
             if not target.exists():
                 shutil.copy2(prompt_file, target)
                 self.logger.info(f"Seeded prompt: {prompt_file.name}")
-    
+
     def _build_default_project_config(self) -> Dict[str, Any]:
         """Build default config from repository roles/agents.yaml if it exists."""
         config = {
             "main_bot_token": "dummy_token_for_testing",
             "target_chat_id": 0,
             "log_level": "INFO",
-            "roles": []
+            "roles": [],
         }
-        
+
         if not DEFAULT_ROLES_FILE.exists():
             return config
-        
+
         try:
-            with open(DEFAULT_ROLES_FILE, 'r', encoding='utf-8') as f:
+            with open(DEFAULT_ROLES_FILE, "r", encoding="utf-8") as f:
                 default_roles_data = yaml.safe_load(f)
-            
-            if default_roles_data and 'roles' in default_roles_data:
-                for role in default_roles_data['roles']:
+
+            if default_roles_data and "roles" in default_roles_data:
+                for role in default_roles_data["roles"]:
                     role_copy = dict(role)
-                    prompt_value = role_copy.pop('system_prompt_file', '')
+                    prompt_value = role_copy.pop("system_prompt_file", "")
                     if prompt_value:
                         prompt_path = Path(prompt_value)
-                        role_copy['prompt_file'] = prompt_path.name
+                        role_copy["prompt_file"] = prompt_path.name
                     else:
-                        role_copy['prompt_file'] = ''
-                    
-                    role_copy.setdefault('telegram_bot_token', '')
-                    config['roles'].append(role_copy)
-                
-                self.logger.info(f"Seeded {len(config['roles'])} roles from repository defaults")
+                        role_copy["prompt_file"] = ""
+
+                    role_copy.setdefault("telegram_bot_token", "")
+                    config["roles"].append(role_copy)
+
+                self.logger.info(
+                    f"Seeded {len(config['roles'])} roles from repository defaults"
+                )
         except Exception as e:
             self.logger.warning(f"Could not seed roles from repository: {e}")
-        
+
         return config
 
 

@@ -13,6 +13,7 @@ import sys
 import os
 from typing import Optional
 import httpx
+import argparse
 
 # --- PROXY CONFIGURATION ---
 # Sanitize proxy environment variables immediately at startup.
@@ -34,6 +35,28 @@ for var in [
 
 from app.config import Config
 from app.utils.logger import setup_logger
+
+# Parse command line arguments
+parser = argparse.ArgumentParser(description="NeuroCrew Lab")
+parser.add_argument(
+    "--create-project", metavar="NAME", help="Create a new project with the given name"
+)
+args, unknown = parser.parse_known_args()
+
+# Handle project creation before importing Config
+if args.create_project:
+    from app.config.manager import MultiProjectManager
+
+    manager = MultiProjectManager()
+    try:
+        project = manager.create_project(args.create_project)
+        print(f"✅ Project '{args.create_project}' created successfully!")
+        print(f"📁 Location: {project.project_dir}")
+        print("🚀 You can now run: python main.py")
+        sys.exit(0)
+    except Exception as e:
+        print(f"❌ Failed to create project: {e}")
+        sys.exit(1)
 
 # Initialize logger
 logger = setup_logger(
@@ -59,6 +82,24 @@ setup_logger(
 def main():
     """Main entry point for the application."""
     try:
+        # Check if we have a valid project
+        if Config.PROJECT_NAME is None:
+            print("🤖 NeuroCrew Lab - Setup Mode")
+            print("No projects configured. Starting setup server...")
+            print("📱 Open: http://localhost:8080")
+            print("🔧 Create your first project via web interface")
+            print("")
+
+            # Import and run setup server
+            try:
+                from setup_server import run_setup_server
+
+                run_setup_server()
+            except Exception as e:
+                print(f"❌ Failed to start setup server: {e}")
+                print("Try running: python setup_server.py")
+            return
+
         # Basic configuration
         logger.info("🚀 Starting NeuroCrew Lab...")
         logger.info(f"Version: 1.0.0")
@@ -120,7 +161,7 @@ from app.interfaces.web.server import run_web_server, app
 async def async_main():
     """Async main function that handles the complete application lifecycle."""
     # Import and create bot instance
-    from app.interfaces.telegram.bot import TelegramBot
+    from app.interfaces.telegram_bot import TelegramBot
 
     # Start web server in a separate thread with better error handling
     def start_web_server():
@@ -139,12 +180,15 @@ async def async_main():
                 break
             except OSError as e:
                 if "Address already in use" in str(e):
-                    logger.warning(f"⚠️ Port {port} is busy, checking if process is ours...")
+                    logger.warning(
+                        f"⚠️ Port {port} is busy, checking if process is ours..."
+                    )
                     # Check if our process is already using the port
                     try:
                         import socket
+
                         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                        result = sock.connect_ex(('localhost', port))
+                        result = sock.connect_ex(("localhost", port))
                         sock.close()
                         if result == 0:
                             logger.info("🔄 Port is in use by our process")
@@ -153,7 +197,9 @@ async def async_main():
                         pass
 
                     if retries > 1:
-                        logger.warning(f"🔄 Retrying in 2 seconds... ({retries-1} retries left)")
+                        logger.warning(
+                            f"🔄 Retrying in 2 seconds... ({retries - 1} retries left)"
+                        )
                         time.sleep(2.0)
                         retries -= 1
                         port += 1  # Try next port
@@ -167,23 +213,34 @@ async def async_main():
                 logger.error(f"❌ Unexpected error in web server: {e}")
                 break
 
-    web_thread = threading.Thread(target=start_web_server, name="web_server", daemon=True)
+    web_thread = threading.Thread(
+        target=start_web_server, name="web_server", daemon=True
+    )
     web_thread.start()
     logger.info(f"🚀 Web server thread started, listening on port 8080")
 
-    # Create global bot reference for signal handling
+    # Create bot instance based on mode
     global bot_instance
-    bot_instance = TelegramBot()
+    mode = Config.get_mode()
+    logger.info(f"Application mode: {mode}")
 
-    # Initialize NeuroCrewLab immediately to trigger role filtering
-    logger.info("Initializing NeuroCrewLab instance...")
-    await bot_instance._ensure_ncrew_initialized()
-    logger.info("NeuroCrewLab initialization completed")
+    if mode == "full":
+        # Full mode: Web + Telegram
+        bot_instance = TelegramBot()
 
-    # Perform startup introductions
-    logger.info("Performing startup agent introductions...")
-    await bot_instance.run_startup_introductions()
-    logger.info("Startup agent introductions completed")
+        # Initialize NeuroCrewLab immediately to trigger role filtering
+        logger.info("Initializing NeuroCrewLab instance...")
+        await bot_instance._ensure_ncrew_initialized()
+        logger.info("NeuroCrewLab initialization completed")
+
+        # Perform startup introductions
+        logger.info("Performing startup agent introductions...")
+        await bot_instance.run_startup_introductions()
+        logger.info("Startup agent introductions completed")
+    else:
+        # Web-only mode: Only web interface
+        bot_instance = None
+        logger.info("Running in web-only mode - Telegram bot disabled")
 
     shutdown_event = asyncio.Event()
     shutdown_task: Optional[asyncio.Task] = None
@@ -215,8 +272,9 @@ async def async_main():
         await shutdown_task
         return shutdown_task
 
-    # Add graceful_shutdown to bot for internal access
-    bot_instance.graceful_shutdown = graceful_shutdown
+    # Add graceful_shutdown to bot for internal access (if bot exists)
+    if bot_instance is not None:
+        bot_instance.graceful_shutdown = graceful_shutdown
 
     loop = asyncio.get_running_loop()
 
@@ -241,20 +299,31 @@ async def async_main():
                 ),
             )
 
-        logger.info("Starting NeuroCrew Lab Telegram bot...")
-        # Use the proper async lifecycle management
-        await bot_instance.application.initialize()
-        await bot_instance.application.start()
-        await bot_instance.application.updater.start_polling(drop_pending_updates=True)
+        if bot_instance is not None:
+            logger.info("Starting NeuroCrew Lab Telegram bot...")
+            # Use the proper async lifecycle management
+            await bot_instance.application.initialize()
+            await bot_instance.application.start()
+            await bot_instance.application.updater.start_polling(
+                drop_pending_updates=True
+            )
 
-        # Keep the bot running with hot-reload capability
-        try:
-            while not shutdown_event.is_set():
-                # Configuration is now hot-reloaded automatically via Config.reload_configuration()
-                # No need for manual restart or flag detection - instant updates!
-                await asyncio.sleep(1)
-        except asyncio.CancelledError:
-            logger.info("Bot operation cancelled")
+            # Keep the bot running with hot-reload capability
+            try:
+                while not shutdown_event.is_set():
+                    # Configuration is now hot-reloaded automatically via Config.reload_configuration()
+                    # No need for manual restart or flag detection - instant updates!
+                    await asyncio.sleep(1)
+            except asyncio.CancelledError:
+                logger.info("Bot operation cancelled")
+        else:
+            logger.info("Web-only mode: Telegram bot not started")
+            # In web-only mode, just keep the web server running
+            try:
+                while not shutdown_event.is_set():
+                    await asyncio.sleep(1)
+            except asyncio.CancelledError:
+                logger.info("Web server operation cancelled")
 
         if not shutdown_event.is_set():
             await ensure_shutdown("loop completed")

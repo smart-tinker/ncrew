@@ -17,18 +17,41 @@ from .manager import multi_project_manager
 
 def _initialize_project_context() -> Dict[str, Any]:
     """Initialize project context from ~/.ncrew/."""
-    project_name = os.getenv("NCREW_PROJECT") or multi_project_manager.get_current_project()
+    project_name = (
+        os.getenv("NCREW_PROJECT") or multi_project_manager.get_current_project()
+    )
 
     if not project_name:
-        project_name = "default"
+        # No projects exist - return minimal context for setup mode
+        return {
+            "project_name": None,
+            "project_dir": None,
+            "config_file": None,
+            "config": {},
+            "data_dir": Path.home() / ".ncrew" / "temp",
+            "prompts_dir": Path.home() / ".ncrew" / "prompts",
+            "max_conversation_length": 200,
+            "agent_timeout": 600,
+            "log_level": "INFO",
+            "system_reminder_interval": 5,
+        }
 
-    project = multi_project_manager.get_project(project_name)
-    if project is None:
-        raise FileNotFoundError(f"Project '{project_name}' not found and could not be created.")
+    # Load config directly to avoid circular import
+    from pathlib import Path
 
-    # Load config.yaml
-    config = project.load_config()
-    data_dir = project.project_dir / "data"
+    config_dir = Path.home() / ".ncrew"
+    project_dir = config_dir / "projects" / project_name
+    config_file = project_dir / "config.yaml"
+
+    if not config_file.exists():
+        raise FileNotFoundError(f"Project '{project_name}' not found.")
+
+    import yaml
+
+    with open(config_file, "r", encoding="utf-8") as f:
+        config = yaml.safe_load(f) or {}
+
+    data_dir = project_dir / "data"
     data_dir.mkdir(parents=True, exist_ok=True)
 
     # Set project name to environment for external tools
@@ -36,22 +59,54 @@ def _initialize_project_context() -> Dict[str, Any]:
 
     return {
         "project_name": project_name,
-        "project_dir": project.project_dir,
-        "config_file": project.get_config_file(),
+        "project_dir": project_dir,
+        "config_file": config_file,
         "config": config,
         "data_dir": data_dir,
-        "prompts_dir": multi_project_manager.get_prompts_dir(),
+        "prompts_dir": config_dir / "prompts",
         # Directly pass config values
-        "main_bot_token": os.getenv("MAIN_BOT_TOKEN") or config.get("main_bot_token", ""),
-        "target_chat_id": int(os.getenv("TARGET_CHAT_ID") or config.get("target_chat_id", 0)),
-        "log_level": (os.getenv("LOG_LEVEL") or config.get("log_level", "INFO")).upper(),
+        "main_bot_token": os.getenv("MAIN_BOT_TOKEN")
+        or config.get("main_bot_token", ""),
+        "target_chat_id": int(
+            os.getenv("TARGET_CHAT_ID") or config.get("target_chat_id", 0)
+        ),
+        "log_level": (
+            os.getenv("LOG_LEVEL") or config.get("log_level", "INFO")
+        ).upper(),
         "max_conversation_length": int(config.get("max_conversation_length", 200)),
         "agent_timeout": int(config.get("agent_timeout", 600)),
         "system_reminder_interval": int(config.get("system_reminder_interval", 5)),
     }
 
 
-PROJECT_CONTEXT = _initialize_project_context()
+# Lazy initialization of project context
+_PROJECT_CONTEXT = None
+
+
+def get_project_context() -> Dict[str, Any]:
+    """Get project context with lazy initialization."""
+    global _PROJECT_CONTEXT
+    if _PROJECT_CONTEXT is None:
+        try:
+            _PROJECT_CONTEXT = _initialize_project_context()
+        except FileNotFoundError:
+            # No project found - return empty context for setup mode
+            _PROJECT_CONTEXT = {
+                "project_name": None,
+                "project_dir": None,
+                "config_file": None,
+                "config": {},
+                "data_dir": Path.home() / ".ncrew" / "temp",
+                "prompts_dir": Path.home() / ".ncrew" / "prompts",
+                "max_conversation_length": 200,
+                "agent_timeout": 600,
+                "log_level": "INFO",
+                "system_reminder_interval": 5,
+            }
+    return _PROJECT_CONTEXT
+
+
+# Add lazy loading methods to existing Config class
 
 
 @dataclass
@@ -78,14 +133,16 @@ class RoleConfig:
     def __post_init__(self):
         """Валидация и пост-обработка после инициализации."""
         connector_spec = get_connector_spec(self.agent_type)
-        
+
         if not self.role_name:
             raise ValueError("role_name is required")
         if not self.telegram_bot_name:
             raise ValueError("telegram_bot_name is required")
         if not self.agent_type:
             raise ValueError("agent_type is required")
-        if (not self.cli_command) and (not connector_spec or connector_spec.requires_cli):
+        if (not self.cli_command) and (
+            not connector_spec or connector_spec.requires_cli
+        ):
             raise ValueError("cli_command is required")
 
         # Путь к промпту в ~/.ncrew/prompts/
@@ -101,7 +158,9 @@ class RoleConfig:
         return f"Role({self.role_name}: {self.display_name})"
 
     def __repr__(self) -> str:
-        return f"RoleConfig(role_name='{self.role_name}', agent_type='{self.agent_type}')"
+        return (
+            f"RoleConfig(role_name='{self.role_name}', agent_type='{self.agent_type}')"
+        )
 
 
 class RolesRegistry:
@@ -130,7 +189,7 @@ class RolesRegistry:
 
         for role_name, role in self.roles.items():
             connector_spec = get_connector_spec(role.agent_type)
-            
+
             # Проверяем наличие файла промпта
             if role.system_prompt_path and not role.system_prompt_path.exists():
                 errors.append(
@@ -147,7 +206,9 @@ class RolesRegistry:
             if not role.agent_type:
                 errors.append(f"Role '{role_name}': agent_type is missing")
             elif not connector_spec:
-                errors.append(f"Role '{role_name}': Unknown agent_type '{role.agent_type}'")
+                errors.append(
+                    f"Role '{role_name}': Unknown agent_type '{role.agent_type}'"
+                )
 
             # Проверяем cli_command
             requires_cli = connector_spec.requires_cli if connector_spec else True
@@ -169,38 +230,77 @@ class Config:
 
     logger = get_logger("Config")
 
-    # From config.yaml (via PROJECT_CONTEXT)
-    MAIN_BOT_TOKEN: str = PROJECT_CONTEXT["main_bot_token"]
-    TARGET_CHAT_ID: int = PROJECT_CONTEXT["target_chat_id"]
-    TELEGRAM_BOT_TOKENS: Dict[str, str] = {}
-
-    # Project metadata
-    PROJECT_NAME: str = PROJECT_CONTEXT["project_name"]
-    PROJECT_DIR: Path = PROJECT_CONTEXT["project_dir"]
-    PROJECT_CONFIG_FILE: Path = PROJECT_CONTEXT["config_file"]
-    PROMPTS_DIR: Path = PROJECT_CONTEXT["prompts_dir"]
-
-    # Role-based configuration
-    roles_registry: Optional[RolesRegistry] = None
+    # Project configuration - defaults for setup mode
+    MAIN_BOT_TOKEN: str = ""
+    TARGET_CHAT_ID: int = 0
+    PROJECT_NAME: Optional[str] = None
+    PROJECT_DIR: Optional[Path] = None
+    PROJECT_CONFIG_FILE: Optional[Path] = None
+    PROMPTS_DIR: Path = Path.home() / ".ncrew" / "prompts"
     role_based_enabled: bool = False
 
-    # System Configuration
-    MAX_CONVERSATION_LENGTH: int = PROJECT_CONTEXT["max_conversation_length"]
-    AGENT_TIMEOUT: int = PROJECT_CONTEXT["agent_timeout"]
-    LOG_LEVEL: str = PROJECT_CONTEXT["log_level"]
-    DATA_DIR: Path = Path(PROJECT_CONTEXT["data_dir"])
-    ALLOW_DUMMY_TOKENS: bool = os.getenv("NCREW_ALLOW_DUMMY_TOKENS", "1").lower() in ("1", "true", "yes")
+    # Legacy properties - keep for backward compatibility
+    TELEGRAM_BOT_TOKENS: Dict[str, str] = {}
+    roles_registry: Optional[RolesRegistry] = None
 
-    SYSTEM_REMINDER_INTERVAL: int = PROJECT_CONTEXT["system_reminder_interval"]
+    # System Configuration (from app_config.yaml)
+    @classmethod
+    @property
+    def WEB_PORT(cls) -> int:
+        cls._ensure_app_config_loaded()
+        return cls._app_config.get("web_port", 8080)
+
+    @classmethod
+    @property
+    def APP_LOG_LEVEL(cls) -> str:
+        cls._ensure_app_config_loaded()
+        return cls._app_config.get("log_level", "INFO")
+
+    @classmethod
+    def get_mode(cls) -> str:
+        """Get current operation mode."""
+        return "full" if cls.MAIN_BOT_TOKEN and cls.TARGET_CHAT_ID else "web_only"
+
+    # Project-specific configuration - defaults for setup mode
+    MAX_CONVERSATION_LENGTH: int = 200
+    AGENT_TIMEOUT: int = 600
+    LOG_LEVEL: str = "INFO"
+    DATA_DIR: Path = Path.home() / ".ncrew" / "temp"
+    ALLOW_DUMMY_TOKENS: bool = os.getenv("NCREW_ALLOW_DUMMY_TOKENS", "1").lower() in (
+        "1",
+        "true",
+        "yes",
+    )
+
+    SYSTEM_REMINDER_INTERVAL: int = 5
 
     # Telegram Configuration
     TELEGRAM_MAX_MESSAGE_LENGTH: int = 4096
     MESSAGE_SPLIT_THRESHOLD: int = 4000
 
     @classmethod
+    def _load_app_config(cls) -> Dict[str, Any]:
+        """Load global application configuration."""
+        app_config_file = Path.home() / ".ncrew" / "app_config.yaml"
+        if not app_config_file.exists():
+            return {
+                "version": "1.0",
+                "first_run": True,
+                "default_project": None,
+                "web_port": 8080,
+                "log_level": "INFO",
+            }
+
+        with open(app_config_file, "r", encoding="utf-8") as f:
+            return yaml.safe_load(f) or {}
+
+    @classmethod
     def validate(cls) -> bool:
         """Validate critical configuration settings."""
-        if not cls.MAIN_BOT_TOKEN or cls.MAIN_BOT_TOKEN == "your_main_listener_bot_token_here":
+        if (
+            not cls.MAIN_BOT_TOKEN
+            or cls.MAIN_BOT_TOKEN == "your_main_listener_bot_token_here"
+        ):
             if not cls.ALLOW_DUMMY_TOKENS:
                 raise ValueError("MAIN_BOT_TOKEN не сконфигурирован.")
             cls.logger.warning("⚠️  Running with dummy MAIN_BOT_TOKEN (test mode)")
@@ -273,7 +373,9 @@ class Config:
                 cls.logger.warning(f"Token not found for {role.telegram_bot_name}")
 
         cls.TELEGRAM_BOT_TOKENS = token_dict
-        cls.logger.info(f"Token loading completed: {loaded_count}/{len(loaded_roles)} tokens loaded")
+        cls.logger.info(
+            f"Token loading completed: {loaded_count}/{len(loaded_roles)} tokens loaded"
+        )
 
     @classmethod
     def load_roles(cls) -> bool:
@@ -285,7 +387,7 @@ class Config:
                 return False
 
             config = project.load_config()
-            
+
             if not config or "roles" not in config:
                 cls.logger.warning("No roles in config.yaml")
                 cls.roles_registry = RolesRegistry()
@@ -299,7 +401,9 @@ class Config:
                     role = create_role_from_dict(role_data)
                     cls.roles_registry.add_role(role)
                 except Exception as e:
-                    cls.logger.error(f"Error loading role {role_data.get('role_name', 'unknown')}: {e}")
+                    cls.logger.error(
+                        f"Error loading role {role_data.get('role_name', 'unknown')}: {e}"
+                    )
                     continue
 
             cls.role_based_enabled = True
@@ -314,9 +418,11 @@ class Config:
         return cls.role_based_enabled and cls.roles_registry is not None
 
     @classmethod
-    def get_available_roles(cls) -> List[RoleConfig]:
-        if cls.is_role_based_enabled():
-            return cls.roles_registry.get_available_roles()
+    def get_available_roles(cls) -> List[str]:
+        """Get list of available roles."""
+        if not cls.roles_registry or not cls.role_based_enabled:
+            return []
+        return cls.roles_registry.get_available_roles()
         return []
 
     @classmethod
@@ -367,7 +473,9 @@ class Config:
     @classmethod
     def reload_configuration(cls, project_name: str) -> bool:
         """Hot-reload configuration for a new project."""
-        cls.logger.info(f"🔄 Switching project and reloading configuration to '{project_name}'...")
+        cls.logger.info(
+            f"🔄 Switching project and reloading configuration to '{project_name}'..."
+        )
 
         global PROJECT_CONTEXT
 
@@ -382,7 +490,7 @@ class Config:
             config = project.load_config()
             data_dir = project.project_dir / "data"
             data_dir.mkdir(parents=True, exist_ok=True)
-            
+
             PROJECT_CONTEXT = {
                 "project_name": project_name,
                 "project_dir": project.project_dir,
@@ -393,9 +501,13 @@ class Config:
                 "main_bot_token": config.get("main_bot_token", ""),
                 "target_chat_id": int(config.get("target_chat_id", 0)),
                 "log_level": config.get("log_level", "INFO").upper(),
-                "max_conversation_length": int(config.get("max_conversation_length", 200)),
+                "max_conversation_length": int(
+                    config.get("max_conversation_length", 200)
+                ),
                 "agent_timeout": int(config.get("agent_timeout", 600)),
-                "system_reminder_interval": int(config.get("system_reminder_interval", 5)),
+                "system_reminder_interval": int(
+                    config.get("system_reminder_interval", 5)
+                ),
             }
 
             # Update Config class attributes
@@ -412,7 +524,9 @@ class Config:
             cls.load_roles()
             cls._load_telegram_bot_tokens()
 
-            cls.logger.info(f"✅ Hot-reload to '{project_name}' completed: {len(cls.get_available_roles())} roles loaded.")
+            cls.logger.info(
+                f"✅ Hot-reload to '{project_name}' completed: {len(cls.get_available_roles())} roles loaded."
+            )
             return True
 
         except Exception as e:
@@ -421,10 +535,11 @@ class Config:
             os.environ["NCREW_PROJECT"] = cls.PROJECT_NAME
             return False
 
-# Initialize
-Config.load_roles()
-if Config.is_role_based_enabled():
-    Config._load_telegram_bot_tokens()
+
+# Initialize - skip in setup mode
+# Config.load_roles()
+# if Config.is_role_based_enabled():
+#     Config._load_telegram_bot_tokens()
 
 # Global configuration instance
 config = Config()
