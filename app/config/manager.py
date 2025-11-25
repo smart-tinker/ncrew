@@ -14,7 +14,7 @@ from typing import Dict, Optional, List, Any
 from app.utils.logger import get_logger
 
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 DEFAULT_ROLES_FILE = REPO_ROOT / "roles" / "agents.yaml"
 DEFAULT_PROMPTS_DIR = REPO_ROOT / "roles" / "prompts"
 

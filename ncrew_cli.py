@@ -13,7 +13,7 @@ Usage:
 import sys
 import argparse
 from pathlib import Path
-from app.config_manager import multi_project_manager
+from app.config.manager import multi_project_manager
 from app.utils.logger import get_logger
 
 logger = get_logger("NCrewCLI")

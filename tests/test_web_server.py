@@ -2,7 +2,7 @@ import os
 import base64
 import pytest
 from unittest.mock import patch, mock_open
-from app.interfaces.web_server import app
+from app.interfaces.web.server import app
 
 @pytest.fixture
 def client():
@@ -24,7 +24,7 @@ def test_auth_success(client):
         'Authorization': 'Basic ' + base64.b64encode(b"admin:password").decode('utf-8')
     }
 
-    with patch('app.interfaces.web_server.get_roles', return_value=[]):
+    with patch('app.interfaces.web.server.get_roles', return_value=[]):
         response = client.get('/', headers=headers)
         assert response.status_code == 200
 
@@ -39,7 +39,7 @@ def test_index_page_loads(mock_file_open, client):
     assert response.status_code == 200
 
 
-@patch('app.interfaces.web_server.save_roles')
+@patch('app.interfaces.web.server.save_roles')
 def test_save_roles(mock_save_roles, client):
     """Test that saving roles redirects and creates a reload file."""
     import time
@@ -60,7 +60,7 @@ def test_save_roles(mock_save_roles, client):
         'telegram_bot_token': ['new_token']
     }
 
-    with patch('app.interfaces.web_server.get_roles', return_value=[]):
+    with patch('app.interfaces.web.server.get_roles', return_value=[]):
         with patch('builtins.open', mock_open()) as mock_file:
             response = client.post('/save', headers=headers, data=form_data, follow_redirects=True)
 

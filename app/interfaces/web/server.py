@@ -6,6 +6,9 @@ from flask import Flask, Response, render_template, request, redirect, url_for, 
 from dotenv import load_dotenv, find_dotenv, set_key
 from pathlib import Path
 
+from app.config.manager import multi_project_manager
+from app.config import Config
+
 ROLE_CONFIG_FIELDS = [
     "role_name",
     "display_name",
@@ -21,7 +24,7 @@ ROLE_CONFIG_FIELDS = [
 load_dotenv()
 
 # Resolve template directory relative to project root
-base_dir = Path(__file__).resolve().parent.parent.parent
+base_dir = Path(__file__).resolve().parent.parent.parent.parent
 template_dir = base_dir / "templates"
 
 app = Flask(__name__, template_folder=str(template_dir))
@@ -97,48 +100,41 @@ import threading
 
 # --- Role Management ---
 def get_roles():
-    with open("roles/agents.yaml", "r") as f:
-        roles_data = yaml.safe_load(f)
-
-    roles = roles_data.get("roles", [])
-
-    # Load tokens
-    dotenv_path = find_dotenv()
-    for role in roles:
-        bot_name = role.get("telegram_bot_name")
-        if bot_name:
-            token_var = f"{bot_name.upper()}_TOKEN"
-            token = os.getenv(token_var)
-            role["telegram_bot_token"] = token if token else ""
-
+    """Get roles from the current project configuration."""
+    project_name = Config.PROJECT_NAME
+    project = multi_project_manager.get_project(project_name)
+    if not project:
+        return []
+    
+    config_data = project.load_config()
+    roles = config_data.get("roles", [])
+    
+    # Ensure all tokens are loaded (if we wanted to load from .env we would do it here, 
+    # but we prefer everything in config now)
     return roles
 
 
 def save_roles(roles):
-    # Save roles to yaml without sensitive token data
+    """Save roles to the current project configuration."""
+    project_name = Config.PROJECT_NAME
+    project = multi_project_manager.get_project(project_name)
+    if not project:
+        return
+    
+    config_data = project.load_config()
+    
+    # Filter roles to only include allowed fields
     sanitized_roles = []
     for role in roles:
         sanitized_role = {
             key: role.get(key, "")
-            for key in ROLE_YAML_FIELDS
-            if role.get(key) not in (None, "")
-            or key in ("role_name", "telegram_bot_name")
+            for key in ROLE_CONFIG_FIELDS
+            if role.get(key) is not None
         }
         sanitized_roles.append(sanitized_role)
-
-    with open("roles/agents.yaml", "w", encoding="utf-8") as f:
-        yaml.safe_dump(
-            {"roles": sanitized_roles}, f, sort_keys=False, allow_unicode=True
-        )
-
-    # Save tokens to .env
-    dotenv_path = find_dotenv()
-    for role in roles:
-        bot_name = role.get("telegram_bot_name")
-        if bot_name:
-            token_var = f"{bot_name.upper()}_TOKEN"
-            token_value = role.get("telegram_bot_token", "") or ""
-            set_key(dotenv_path, token_var, token_value, quote_mode="never")
+    
+    config_data["roles"] = sanitized_roles
+    project.save_config(config_data)
 
 
 @app.route("/")
@@ -208,7 +204,7 @@ def save():
             "role_name": role_name,
             "display_name": display_names[i] if i < len(display_names) else "",
             "telegram_bot_name": telegram_bot_name,
-            "system_prompt_file": prompt_files[i] if i < len(prompt_files) else "",
+            "prompt_file": prompt_files[i] if i < len(prompt_files) else "", # Changed system_prompt_file to prompt_file to match Config
             "agent_type": agent_types[i] if i < len(agent_types) else "",
             "cli_command": cli_commands[i] if i < len(cli_commands) else "",
             "description": descriptions[i] if i < len(descriptions) else "",
@@ -224,7 +220,7 @@ def save():
     # Hot-reload configuration without service interruption
     try:
         from app.config import Config
-        success = Config.reload_configuration()
+        success = Config.reload_configuration(Config.PROJECT_NAME)
         if success:
             app.logger.info("🔄 Configuration hot-reloaded successfully")
         else:
@@ -243,17 +239,21 @@ def get_prompt():
         return jsonify({"error": "Filepath is required"}), 400
 
     try:
-        # Basic security check to prevent directory traversal
-        base_dir = Path.cwd()
-        full_path = (base_dir / filepath).resolve()
-        if not full_path.is_relative_to(base_dir):
-            return jsonify({"error": "Invalid filepath"}), 400
-
-        with open(full_path, "r", encoding="utf-8") as f:
-            content = f.read()
+        # Load from shared prompts dir
+        prompts_dir = multi_project_manager.get_prompts_dir()
+        prompt_name = Path(filepath).name # filepath in request is likely just the filename or partial path
+        
+        # Security check: prompt should be in prompts_dir
+        # Actually multi_project_manager.load_prompt expects prompt_name (filename without ext or with?)
+        # Let's use load_prompt logic but adapted.
+        # The frontend likely sends just filename
+        
+        content = multi_project_manager.load_prompt(prompt_name.replace(".md", ""))
+        
+        if content is None:
+             return jsonify({"error": "File not found"}), 404
+             
         return jsonify({"content": content})
-    except FileNotFoundError:
-        return jsonify({"error": "File not found"}), 404
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -269,14 +269,10 @@ def save_prompt():
         return jsonify({"error": "Filepath and content are required"}), 400
 
     try:
-        # Basic security check
-        base_dir = Path.cwd()
-        full_path = (base_dir / filepath).resolve()
-        if not full_path.is_relative_to(base_dir):
-            return jsonify({"error": "Invalid filepath"}), 400
-
-        with open(full_path, "w", encoding="utf-8") as f:
-            f.write(content)
+        # Save to shared prompts dir
+        prompt_name = Path(filepath).stem
+        multi_project_manager.save_prompt(prompt_name, content)
+        
         return jsonify({"message": "File saved successfully"})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -403,7 +399,7 @@ def send_chat_message():
         # Trigger message processing through engine
         # Import here to avoid circular imports
         from app.core.engine import NeuroCrewLab
-        from app.interfaces.telegram_bot import TelegramBot
+        from app.interfaces.telegram.bot import TelegramBot
 
         try:
             ncrew = NeuroCrewLab(storage=storage)

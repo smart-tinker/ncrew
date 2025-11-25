@@ -15,8 +15,8 @@ from app.core.engine import NeuroCrewLab
 from app.utils.logger import get_logger
 
 # Import interfaces (existing classes)
-from app.interfaces.telegram_bot import TelegramBot
-from app.interfaces.web_server import app as web_app
+from app.interfaces.telegram.bot import TelegramBot
+from app.interfaces.web.server import app as web_app
 
 
 class OperationMode(Enum):
