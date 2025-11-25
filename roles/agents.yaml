@@ -1,0 +1,9 @@
+roles:
+  - role_name: "test_role"
+    display_name: "Test Role"
+    telegram_bot_name: "TestBot"
+    prompt_file: "test_prompt.md"
+    agent_type: "qwen_acp"
+    cli_command: "qwen"
+    description: "A test role"
+    telegram_bot_token: "dummy_token"

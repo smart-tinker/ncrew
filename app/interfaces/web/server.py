@@ -425,6 +425,79 @@ def send_chat_message():
         return jsonify({"error": str(e)}), 500
 
 
+# --- Project Management API ---
+@app.route("/api/projects/list", methods=["GET"])
+@requires_auth
+def list_projects():
+    """List all available projects."""
+    try:
+        projects = multi_project_manager.list_projects()
+        current_project = multi_project_manager.get_current_project()
+        return jsonify({
+            "projects": projects,
+            "current_project": current_project
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/projects/create", methods=["POST"])
+@requires_auth
+def create_project():
+    """Create a new project."""
+    data = request.json
+    project_name = data.get("project_name")
+    
+    if not project_name:
+        return jsonify({"error": "Project name is required"}), 400
+        
+    # Basic validation for project name (alphanumeric + underscores/hyphens)
+    if not re.match(r"^[a-zA-Z0-9_-]+$", project_name):
+         return jsonify({"error": "Invalid project name. Use only letters, numbers, underscores, and hyphens."}), 400
+
+    try:
+        if multi_project_manager.project_exists(project_name):
+            return jsonify({"error": f"Project '{project_name}' already exists"}), 400
+            
+        multi_project_manager.create_project(project_name)
+        
+        # Switch to the new project
+        multi_project_manager.load_project_config(project_name)
+        
+        return jsonify({
+            "success": True, 
+            "message": f"Project '{project_name}' created and activated",
+            "project_name": project_name
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/projects/switch", methods=["POST"])
+@requires_auth
+def switch_project():
+    """Switch to a different project."""
+    data = request.json
+    project_name = data.get("project_name")
+    
+    if not project_name:
+        return jsonify({"error": "Project name is required"}), 400
+
+    try:
+        if not multi_project_manager.project_exists(project_name):
+            return jsonify({"error": f"Project '{project_name}' not found"}), 404
+            
+        multi_project_manager.load_project_config(project_name)
+        
+        return jsonify({
+            "success": True, 
+            "message": f"Switched to project '{project_name}'",
+            "project_name": project_name
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 def run_web_server():
     import time
     import logging

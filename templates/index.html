@@ -146,9 +146,19 @@
         </div>
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
             <h1><i class="fas fa-cog"></i> NeuroCrew Lab - Настройки</h1>
-            <a href="/" style="padding: 0.75rem 1.5rem; background-color: #28a745; color: white; text-decoration: none; border-radius: 4px; display: flex; align-items: center; gap: 0.5rem; font-weight: 600;">
-                <i class="fas fa-comments"></i> К чату
-            </a>
+            <div style="display: flex; gap: 10px; align-items: center;">
+                <div style="position: relative;">
+                     <select id="project-selector" onchange="switchProject(this.value)" style="padding: 0.75rem; border-radius: 4px; border: 1px solid var(--border-color); background-color: var(--card-bg); color: var(--text-color); cursor: pointer; min-width: 150px;">
+                        <option value="" disabled selected>Загрузка...</option>
+                    </select>
+                </div>
+                <button onclick="openNewProjectModal()" class="btn btn-secondary" title="Новый проект">
+                    <i class="fas fa-folder-plus"></i>
+                </button>
+                <a href="/" style="padding: 0.75rem 1.5rem; background-color: #28a745; color: white; text-decoration: none; border-radius: 4px; display: flex; align-items: center; gap: 0.5rem; font-weight: 600;">
+                    <i class="fas fa-comments"></i> К чату
+                </a>
+            </div>
         </div>
         <form action="/save" method="post" id="roles-form">
             <div id="roles-container">
@@ -244,6 +254,26 @@
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" onclick="closePromptModal()">Отмена</button>
                 <button type="button" class="btn btn-primary" onclick="savePrompt()"><i class="fas fa-save"></i> Сохранить</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- New Project Modal -->
+    <div id="new-project-modal" class="modal">
+        <div class="modal-content" style="max-width: 500px;">
+            <div class="modal-header">
+                <h2>Создать новый проект</h2>
+                <span class="close-button" onclick="closeNewProjectModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="new-project-name">Имя проекта (англ, цифры, _, -)</label>
+                    <input type="text" id="new-project-name" placeholder="my_new_project">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeNewProjectModal()">Отмена</button>
+                <button type="button" class="btn btn-primary" onclick="createProject()">Создать</button>
             </div>
         </div>
     </div>
@@ -690,7 +720,108 @@
             if (event.target == modal) {
                 closePromptModal();
             }
+            if (event.target == document.getElementById('new-project-modal')) {
+                closeNewProjectModal();
+            }
         }
+
+        // Project Management
+        async function loadProjects() {
+            try {
+                const response = await fetch('/api/projects/list');
+                const data = await response.json();
+                
+                if (data.error) {
+                    console.error('Error loading projects:', data.error);
+                    return;
+                }
+                
+                const selector = document.getElementById('project-selector');
+                selector.innerHTML = '';
+                
+                data.projects.forEach(proj => {
+                    const option = document.createElement('option');
+                    option.value = proj;
+                    option.textContent = proj;
+                    if (proj === data.current_project) {
+                        option.selected = true;
+                    }
+                    selector.appendChild(option);
+                });
+            } catch (e) {
+                console.error('Failed to load projects:', e);
+            }
+        }
+
+        async function switchProject(projectName) {
+            if (!confirm(`Переключиться на проект "${projectName}"? Страница будет перезагружена.`)) {
+                // Revert selection if cancelled
+                loadProjects(); 
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/projects/switch', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ project_name: projectName })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    window.location.reload();
+                } else {
+                    alert('Ошибка: ' + (result.error || 'Unknown error'));
+                    loadProjects(); // Revert selection
+                }
+            } catch (e) {
+                alert('Ошибка сети: ' + e.message);
+                loadProjects();
+            }
+        }
+
+        function openNewProjectModal() {
+            document.getElementById('new-project-modal').style.display = 'flex';
+            document.getElementById('new-project-name').focus();
+        }
+
+        function closeNewProjectModal() {
+            document.getElementById('new-project-modal').style.display = 'none';
+        }
+
+        async function createProject() {
+            const nameInput = document.getElementById('new-project-name');
+            const projectName = nameInput.value.trim();
+            
+            if (!projectName) {
+                alert('Введите имя проекта');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/projects/create', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ project_name: projectName })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    alert(`Проект "${projectName}" создан!`);
+                    closeNewProjectModal();
+                    window.location.reload();
+                } else {
+                    alert('Ошибка: ' + (result.error || 'Unknown error'));
+                }
+            } catch (e) {
+                alert('Ошибка сети: ' + e.message);
+            }
+        }
+
+        // Initialize projects on load
+        document.addEventListener('DOMContentLoaded', loadProjects);
 
         document.body.classList.add('dark-mode');
         document.querySelector('.dark-mode-toggle i').classList.remove('fa-moon');
