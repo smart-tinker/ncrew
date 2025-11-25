@@ -1,0 +1,74 @@
+[33mcommit 475c642ebc157c5d6451f25c606de9258917f4ea[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mcto-task-27[m[33m, [m[1;31morigin/cto-task-27[m[33m)[m
+Author: cto-new[bot] <140088366+cto-new[bot]@users.noreply.github.com>
+Date:   Tue Nov 25 05:22:58 2025 +0000
+
+    feat(web): implement multi-project management API and UI
+    
+    Add new backend endpoints to manage projects: list, create, and switch.
+    Introduce UI changes to support selecting and creating projects from the web UI with a modal for input. Implement triggering a hot-reload when switching projects. Seed default prompts and include tests coverage for the new endpoints.
+
+ app/interfaces/web/server.py     |  73 [32m+++++++++++++++++++++[m
+ roles/agents.yaml                |   9 [32m+++[m
+ roles/prompts/test_prompt.md     |   1 [32m+[m
+ templates/index.html             | 137 [32m++++++++++++++++++++++++++++++++++++++[m[31m-[m
+ tests/test_project_management.py |  82 [32m+++++++++++++++++++++++[m
+ 5 files changed, 299 insertions(+), 3 deletions(-)
+
+[33mcommit 574a0fd0173523d69f558dc59a2caaadf4218d82[m
+Merge: d141ecf a09bc87
+Author: dadgo <eldarkurbanov@gmail.com>
+Date:   Tue Nov 25 07:58:17 2025 +0300
+
+    Merge pull request #25 from smart-tinker/cto-task-21-e01
+    
+    refactor(app): consolidate entry points and restructure configuration and interfaces
+
+[33mcommit a09bc8735e704567d9a6c9dee490639300e73144[m
+Author: cto-new[bot] <140088366+cto-new[bot]@users.noreply.github.com>
+Date:   Tue Nov 25 04:54:55 2025 +0000
+
+    refactor(app): consolidate entry points and restructure configuration and interfaces
+    
+    This change unifies startup by removing legacy entry points, consolidating
+    config handling, and reorganizing interfaces for clarity. It introduces a
+    single main.py as the project bootstrap and moves config management under
+    app/config with MultiProjectManager as the primary mechanism. It splits
+    interfaces into dedicated telegram and web packages and removes the roles
+    directory, moving prompts under ~/.ncrew/prompts. Imports across the repo
+    are updated to reflect the new layout.
+    
+    BREAKING CHANGE: The repository structure has changed significantly. main.py
+    is now the sole entry point; config and interfaces have moved, and the roles
+    directory has been removed. Update scripts and tests accordingly.
+
+ app/application.py                                 |   4 [32m+[m[31m-[m
+ app/{config.py => config/__init__.py}              |   2 [32m+[m[31m-[m
+ app/{config_manager.py => config/manager.py}       |   2 [32m+[m[31m-[m
+ .../{telegram_adapter.py => telegram/adapter.py}   |   0
+ .../{telegram_bot.py => telegram/bot.py}           |   0
+ app/interfaces/{web_adapter.py => web/adapter.py}  |   0
+ app/interfaces/{web_server.py => web/server.py}    | 104 [32m++++++++[m[31m--------[m
+ main.py                                            |   4 [32m+[m[31m-[m
+ main_mvp.py                                        | 131 [31m---------------------[m
+ main_new.py                                        | 108 [31m-----------------[m
+ ncrew_cli.py                                       |   2 [32m+[m[31m-[m
+ roles/agents.yaml                                  |  83 [31m-------------[m
+ roles/prompts/code_review.md                       |  51 [31m--------[m
+ roles/prompts/devops_senior.md                     |  51 [31m--------[m
+ roles/prompts/product_analyst.md                   |  27 [31m-----[m
+ roles/prompts/product_owner.md                     |  27 [31m-----[m
+ roles/prompts/scrum_master.md                      |  51 [31m--------[m
+ roles/prompts/sdet_senior.md                       |  27 [31m-----[m
+ roles/prompts/security_analyst.md                  |  27 [31m-----[m
+ roles/prompts/senior_architect.md                  |  52 [31m--------[m
+ roles/prompts/software_developer.md                |  91 [31m--------------[m
+ roles/prompts/system_analyst.md                    |  26 [31m----[m
+ scripts/test_env_vars.py                           |  71 [31m-----------[m
+ scripts/test_external_deps.py                      |  16 [32m+[m[31m--[m
+ tests/integration/test_start_integration.py        |   4 [32m+[m[31m-[m
+ tests/test_mvp_validation.py                       |  13 [32m+[m[31m-[m
+ tests/test_ncrew_device_code_flow.py               | 125 [31m--------------------[m
+ tests/test_start_command.py                        |  10 [32m+[m[31m-[m
+ tests/test_web_chat.py                             |   2 [32m+[m[31m-[m
+ tests/test_web_server.py                           |   8 [32m+[m[31m-[m
+ 30 files changed, 83 insertions(+), 1036 deletions(-)

@@ -42,9 +42,9 @@ def _initialize_project_context() -> Dict[str, Any]:
         "data_dir": data_dir,
         "prompts_dir": multi_project_manager.get_prompts_dir(),
         # Directly pass config values
-        "main_bot_token": config.get("main_bot_token", ""),
-        "target_chat_id": int(config.get("target_chat_id", 0)),
-        "log_level": config.get("log_level", "INFO").upper(),
+        "main_bot_token": os.getenv("MAIN_BOT_TOKEN") or config.get("main_bot_token", ""),
+        "target_chat_id": int(os.getenv("TARGET_CHAT_ID") or config.get("target_chat_id", 0)),
+        "log_level": (os.getenv("LOG_LEVEL") or config.get("log_level", "INFO")).upper(),
         "max_conversation_length": int(config.get("max_conversation_length", 200)),
         "agent_timeout": int(config.get("agent_timeout", 600)),
         "system_reminder_interval": int(config.get("system_reminder_interval", 5)),

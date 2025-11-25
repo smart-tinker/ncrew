@@ -1,1 +1,1 @@
-You are a test assistant.
+You are a test agent.

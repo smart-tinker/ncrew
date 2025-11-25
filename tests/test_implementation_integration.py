@@ -19,8 +19,11 @@ class TestImplementationIntegration:
         """Test real NeuroCrewApplication initialization."""
         app = NeuroCrewApplication()
 
-        # Should initialize without interfaces
-        success = await app.initialize()
+        # Mock connector availability to ensure initialization succeeds even if tools are missing
+        with patch("app.core.agent_coordinator.AgentCoordinator._validate_cli_command", return_value=True):
+            # Should initialize without interfaces
+            success = await app.initialize()
+            
         assert success is True
         assert app.ncrew_lab is not None
         assert app.operation_mode.value in ["headless", "telegram", "web", "multi"]
@@ -37,7 +40,8 @@ class TestImplementationIntegration:
         app = NeuroCrewApplication()
 
         with patch('app.application.Config.MAIN_BOT_TOKEN', 'fake_token'), \
-             patch('app.application.Config.TARGET_CHAT_ID', '123456789'):
+             patch('app.application.Config.TARGET_CHAT_ID', '123456789'), \
+             patch("app.core.agent_coordinator.AgentCoordinator._validate_cli_command", return_value=True):
 
             await app.initialize()
             # With Telegram config, should detect multi_interface mode
@@ -49,7 +53,9 @@ class TestImplementationIntegration:
         app = NeuroCrewApplication()
 
         # Initialize
-        assert await app.initialize()
+        with patch("app.core.agent_coordinator.AgentCoordinator._validate_cli_command", return_value=True):
+            assert await app.initialize()
+        
         assert not app.is_running
 
         # Mock interfaces for testing
@@ -75,7 +81,8 @@ class TestImplementationIntegration:
         app = NeuroCrewApplication()
 
         with patch('app.application.Config.MAIN_BOT_TOKEN', ''), \
-             patch('app.application.Config.TARGET_CHAT_ID', '0'):
+             patch('app.application.Config.TARGET_CHAT_ID', '0'), \
+             patch("app.core.agent_coordinator.AgentCoordinator._validate_cli_command", return_value=True):
 
             await app.initialize()
             assert app.operation_mode.value == "headless"
@@ -91,7 +98,8 @@ class TestImplementationIntegration:
     async def test_message_processing_flow(self):
         """Test end-to-end message processing."""
         app = NeuroCrewApplication()
-        await app.initialize()
+        with patch("app.core.agent_coordinator.AgentCoordinator._validate_cli_command", return_value=True):
+            await app.initialize()
 
         # Start application (mock interfaces)
         with patch.object(app, '_start_telegram_interface', return_value=True), \
@@ -134,7 +142,8 @@ class TestImplementationIntegration:
     async def test_interface_failure_handling(self):
         """Test graceful handling of interface failures."""
         app = NeuroCrewApplication()
-        await app.initialize()
+        with patch("app.core.agent_coordinator.AgentCoordinator._validate_cli_command", return_value=True):
+            await app.initialize()
 
         # Start with mock interfaces
         with patch.object(app, '_start_telegram_interface', return_value=True), \
@@ -166,7 +175,8 @@ class TestImplementationIntegration:
     async def test_configuration_integration(self):
         """Test integration with existing configuration system."""
         app = NeuroCrewApplication()
-        await app.initialize()
+        with patch("app.core.agent_coordinator.AgentCoordinator._validate_cli_command", return_value=True):
+            await app.initialize()
 
         # Check if it can access existing configuration
         roles = Config.get_available_roles()
@@ -229,7 +239,8 @@ class TestImplementationCompatibility:
     async def test_component_integration(self):
         """Test integration with existing NeuroCrew components."""
         app = NeuroCrewApplication()
-        await app.initialize()
+        with patch("app.core.agent_coordinator.AgentCoordinator._validate_cli_command", return_value=True):
+            await app.initialize()
 
         # Verify existing components are accessible
         assert hasattr(app.ncrew_lab, 'agent_coordinator')
