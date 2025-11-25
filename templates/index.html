@@ -14,7 +14,10 @@
             --primary-color: #007bff;
             --secondary-color: #6c757d;
             --danger-color: #dc3545;
+            --success-color: #28a745;
             --header-bg: #e9ecef;
+            --sidebar-bg: #f8f9fa;
+            --sidebar-border: #dee2e6;
         }
         body.dark-mode {
             --bg-color: #212529;
@@ -22,6 +25,8 @@
             --card-bg: #343a40;
             --border-color: #495057;
             --header-bg: #495057;
+            --sidebar-bg: #343a40;
+            --sidebar-border: #495057;
         }
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -31,8 +36,57 @@
             margin: 0;
             padding: 0;
         }
-        .container { max-width: 960px; margin: 0 auto; padding: 20px; }
-        h1 { text-align: center; margin-bottom: 2rem; }
+
+        .main-container {
+            display: flex;
+            min-height: 100vh;
+        }
+
+        /* Левая колонка - редактор ролей проекта */
+        .roles-panel {
+            flex: 1;
+            padding: 20px;
+            border-right: 1px solid var(--border-color);
+            overflow-y: auto;
+        }
+
+        /* Правая колонка - редактор промптов */
+        .prompts-panel {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            background-color: var(--sidebar-bg);
+        }
+
+        .panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+            padding-bottom: 1rem;
+            border-bottom: 2px solid var(--border-color);
+        }
+
+        .panel-title {
+            margin: 0;
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+
+        .project-info {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .project-name {
+            font-weight: 600;
+            color: var(--primary-color);
+        }
+
+        /* Роли */
         .role {
             background-color: var(--card-bg);
             border: 1px solid var(--border-color);
@@ -41,6 +95,7 @@
             box-shadow: 0 2px 4px rgba(0,0,0,0.05);
             cursor: move;
         }
+
         .role-header {
             display: flex;
             justify-content: space-between;
@@ -51,59 +106,218 @@
             border-top-left-radius: 8px;
             border-top-right-radius: 8px;
         }
-        .role-name { margin: 0; font-size: 1.25rem; }
-        .role-body { padding: 1.5rem; }
+
+        .role-name {
+            margin: 0;
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+
+        .role-body {
+            padding: 1.5rem;
+        }
+
         .form-grid {
             display: grid;
-            grid-template-columns: repeat(2, 1fr);
+            grid-template-columns: 1fr 1fr;
             gap: 1rem;
         }
-        .form-group { margin-bottom: 1rem; }
-        .form-group.full-width { grid-column: 1 / -1; }
-        label { display: block; margin-bottom: 0.5rem; font-weight: 600; }
-        input, select, textarea {
-            width: 100%;
-            padding: 0.75rem;
-            box-sizing: border-box;
-            border: 1px solid var(--border-color);
-            border-radius: 4px;
-            background-color: var(--bg-color);
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .form-group.full-width {
+            grid-column: 1 / -1;
+        }
+
+        .form-group label {
+            font-weight: 500;
+            margin-bottom: 0.5rem;
             color: var(--text-color);
         }
+
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            padding: 0.75rem;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            background-color: var(--card-bg);
+            color: var(--text-color);
+            font-size: 0.9rem;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+        }
+
+        .form-group textarea {
+            resize: vertical;
+            min-height: 80px;
+        }
+
         .input-group {
             display: flex;
+            gap: 0.5rem;
         }
+
         .input-group input {
-            border-top-right-radius: 0;
-            border-bottom-right-radius: 0;
-            flex-grow: 1;
+            flex: 1;
         }
-        .input-group .btn {
-            border-top-left-radius: 0;
-            border-bottom-left-radius: 0;
+
+        /* Промпты */
+        .prompts-list {
+            margin-bottom: 2rem;
         }
-        textarea { resize: vertical; min-height: 100px; }
+
+        .prompts-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .prompt-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.75rem 1rem;
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            margin-bottom: 0.5rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .prompt-item:hover {
+            border-color: var(--primary-color);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .prompt-item.active {
+            border-color: var(--primary-color);
+            background-color: rgba(0, 123, 255, 0.05);
+        }
+
+        .prompt-name {
+            font-weight: 500;
+        }
+
+        .prompt-actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .prompt-editor {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1.5rem;
+        }
+
+        .editor-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .editor-title {
+            margin: 0;
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+
+        .editor-content {
+            margin-bottom: 1rem;
+        }
+
+        .editor-textarea {
+            width: 100%;
+            min-height: 400px;
+            padding: 1rem;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            background-color: var(--card-bg);
+            color: var(--text-color);
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 0.9rem;
+            line-height: 1.4;
+            resize: vertical;
+        }
+
+        .editor-textarea:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+        }
+
+        /* Кнопки */
         .btn {
             padding: 0.75rem 1.5rem;
             border: none;
             border-radius: 4px;
             cursor: pointer;
-            font-size: 1rem;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
+            font-size: 0.9rem;
+            font-weight: 500;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            transition: all 0.2s ease;
         }
-        .btn-primary { background-color: var(--primary-color); color: white; }
-        .btn-secondary { background-color: var(--secondary-color); color: white; }
-        .btn-danger { background-color: var(--danger-color); color: white; }
-        .actions { text-align: center; margin-top: 2rem; }
-        .dark-mode-toggle {
-            position: absolute;
-            top: 20px;
-            right: 20px;
-            cursor: pointer;
+
+        .btn-primary {
+            background-color: var(--primary-color);
+            color: white;
         }
-        /* Modal Styles */
+
+        .btn-primary:hover {
+            background-color: #0056b3;
+        }
+
+        .btn-secondary {
+            background-color: var(--secondary-color);
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background-color: #545b62;
+        }
+
+        .btn-success {
+            background-color: var(--success-color);
+            color: white;
+        }
+
+        .btn-success:hover {
+            background-color: #1e7e34;
+        }
+
+        .btn-danger {
+            background-color: var(--danger-color);
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background-color: #bd2130;
+        }
+
+        .btn-small {
+            padding: 0.5rem 1rem;
+            font-size: 0.8rem;
+        }
+
+        /* Модальные окна */
         .modal {
             display: none;
             position: fixed;
@@ -112,588 +326,425 @@
             top: 0;
             width: 100%;
             height: 100%;
-            overflow: auto;
-            background-color: rgba(0,0,0,0.6);
+            background-color: rgba(0,0,0,0.5);
+        }
+
+        .modal-content {
+            background-color: var(--card-bg);
+            margin: 10% auto;
+            padding: 0;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            width: 90%;
+            max-width: 500px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .modal-header {
+            padding: 1.5rem;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-body {
+            padding: 1.5rem;
+        }
+
+        .modal-footer {
+            padding: 1.5rem;
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            justify-content: flex-end;
+            gap: 1rem;
+        }
+
+        .close-button {
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: var(--text-color);
+            padding: 0;
+            width: 30px;
+            height: 30px;
+            display: flex;
             align-items: center;
             justify-content: center;
         }
-        .modal-content {
-            background-color: var(--card-bg);
-            margin: auto;
-            padding: 20px;
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            width: 80%;
-            max-width: 700px;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
-            display: flex;
-            flex-direction: column;
-        }
-        .modal-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 1rem; margin-bottom: 1rem; }
-        .modal-header h2 { margin: 0; }
-        .close-button { color: #aaa; font-size: 28px; font-weight: bold; cursor: pointer; }
-        .modal-body { flex-grow: 1; }
-        #prompt-editor { height: 400px; }
-        .modal-footer { text-align: right; border-top: 1px solid var(--border-color); padding-top: 1rem; margin-top: 1rem; }
-        .modal-footer .btn { margin-left: 0.5rem; }
 
+        .close-button:hover {
+            color: var(--danger-color);
+        }
+
+        /* Темная тема toggle */
+        .dark-mode-toggle {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            z-index: 100;
+        }
+
+        .dark-mode-toggle:hover {
+            background-color: var(--header-bg);
+        }
+
+        /* CLI Builder */
+        .cli-builder-container {
+            margin-top: 10px;
+            padding: 15px;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            background-color: var(--bg-color);
+            display: none;
+        }
+
+        .option-group {
+            margin-bottom: 15px;
+        }
+
+        .option-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+
+        .option-group input[type="checkbox"],
+        .option-group input[type="radio"] {
+            margin-right: 8px;
+        }
+
+        .option-group select {
+            width: 100%;
+            padding: 5px;
+            border: 1px solid var(--border-color);
+            border-radius: 3px;
+            background-color: var(--card-bg);
+            color: var(--text-color);
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .main-container {
+                flex-direction: column;
+            }
+
+            .roles-panel,
+            .prompts-panel {
+                border-right: none;
+                border-bottom: 1px solid var(--border-color);
+            }
+
+            .dark-mode-toggle {
+                position: static;
+                margin: 1rem auto;
+            }
+        }
+
+        /* Utility classes */
+        .text-muted {
+            color: var(--secondary-color);
+        }
+
+        .text-center {
+            text-align: center;
+        }
+
+        .mb-2 {
+            margin-bottom: 1rem;
+        }
+
+        .mt-2 {
+            margin-top: 1rem;
+        }
+
+        .hidden {
+            display: none;
+        }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="dark-mode-toggle" onclick="toggleDarkMode()">
-            <i class="fas fa-moon"></i>
-        </div>
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
-            <h1><i class="fas fa-cog"></i> NeuroCrew Lab - Настройки</h1>
-            <div style="display: flex; gap: 10px; align-items: center;">
-                <div style="position: relative;">
-                     <select id="project-selector" onchange="switchProject(this.value)" style="padding: 0.75rem; border-radius: 4px; border: 1px solid var(--border-color); background-color: var(--card-bg); color: var(--text-color); cursor: pointer; min-width: 150px;">
-                        <option value="" disabled selected>Загрузка...</option>
-                    </select>
+    <!-- Dark mode toggle -->
+    <div class="dark-mode-toggle" onclick="toggleDarkMode()">
+        <i class="fas fa-moon"></i>
+    </div>
+
+    <div class="main-container">
+        <!-- Левая колонка - редактор ролей проекта -->
+        <div class="roles-panel">
+            <div class="panel-header">
+                <h1 class="panel-title">Редактор ролей проекта</h1>
+                <div>
+                    <button onclick="addRole()" class="btn btn-success">
+                        <i class="fas fa-plus"></i> Добавить роль
+                    </button>
                 </div>
-                <button onclick="openNewProjectModal()" class="btn btn-secondary" title="Новый проект">
-                    <i class="fas fa-folder-plus"></i>
-                </button>
-                <a href="/" style="padding: 0.75rem 1.5rem; background-color: #28a745; color: white; text-decoration: none; border-radius: 4px; display: flex; align-items: center; gap: 0.5rem; font-weight: 600;">
-                    <i class="fas fa-comments"></i> К чату
-                </a>
             </div>
-        </div>
-        <form action="/save" method="post" id="roles-form">
-            <div id="roles-container">
-                {% for role in roles %}
-                <div class="role" data-id="{{ loop.index0 }}">
-                    <div class="role-header">
-                        <h3 class="role-name">{{ role.role_name }}</h3>
-                        <button type="button" class="btn btn-danger" onclick="removeRole(this)"><i class="fas fa-trash"></i></button>
-                    </div>
-                    <div class="role-body">
-                        <input type="hidden" name="role_name" value="{{ role.role_name }}">
-                        <input type="hidden" name="telegram_bot_name" value="{{ role.telegram_bot_name }}">
-                        <input type="hidden" name="is_moderator" value="{{ 'true' if role.get('is_moderator') else 'false' }}">
-                        <div class="form-grid">
-                            <div class="form-group full-width">
-                                <label style="font-weight: normal; cursor: pointer; display: flex; align-items: center;">
-                                    <input type="checkbox" 
-                                           style="width: auto; margin-right: 10px;"
-                                           onchange="this.closest('.role-body').querySelector('input[name=is_moderator]').value = this.checked"
-                                           {% if role.get('is_moderator') %}checked{% endif %}>
-                                    <strong>Модератор</strong> &nbsp;<span class="text-muted">(имеет право останавливать автономный диалог)</span>
-                                </label>
-                            </div>
-                            <div class="form-group">
-                                <label>Отображаемое имя</label>
-                                <input type="text" name="display_name" value="{{ role.display_name }}">
-                            </div>
-                            <div class="form-group">
-                                <label>Файл системного промпта</label>
-                                <div class="input-group">
-                                    <input type="text" name="system_prompt_file" value="{{ role.system_prompt_file }}">
-                                    <button type="button" class="btn btn-secondary" id="edit-prompt-btn-{{ loop.index0 }}" onclick="editPrompt(this)">
-                                        <i class="fas fa-edit"></i>
-                                    </button>
+
+            <div class="project-info">
+                <strong>Текущий проект:</strong> <span class="project-name">{{ current_project or 'Не выбран' }}</span>
+            </div>
+
+            <form action="/save" method="post" id="roles-form">
+                <div id="roles-container">
+                    {% for role in roles %}
+                    <div class="role" data-id="{{ loop.index0 }}">
+                        <div class="role-header">
+                            <h3 class="role-name">{{ role.role_name }}</h3>
+                            <button type="button" class="btn btn-danger btn-small" onclick="removeRole(this)">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                        <div class="role-body">
+                            <input type="hidden" name="role_name" value="{{ role.role_name }}">
+                            <input type="hidden" name="telegram_bot_name" value="{{ role.telegram_bot_name }}">
+                            <input type="hidden" name="is_moderator" value="{{ 'true' if role.get('is_moderator') else 'false' }}">
+
+                            <div class="form-grid">
+                                <div class="form-group">
+                                    <label>Отображаемое имя</label>
+                                    <input type="text" name="display_name" value="{{ role.display_name }}">
                                 </div>
-                            </div>
-                            <div class="form-group">
-                                <label>Тип агента</label>
-                                <select name="agent_type" onchange="updateCliCommand(this)">
-                                    <option value="gemini_acp" {% if role.agent_type == 'gemini_acp' %}selected{% endif %}>Gemini (ACP)</option>
-                                    <option value="opencode_acp" {% if role.agent_type == 'opencode_acp' %}selected{% endif %}>OpenCode (ACP)</option>
-                                    <option value="qwen_acp" {% if role.agent_type == 'qwen_acp' %}selected{% endif %}>Qwen (ACP)</option>
-                                    <option value="codex_cli" {% if role.agent_type == 'codex_cli' %}selected{% endif %}>Codex CLI</option>
-                                    <option value="claude_cli" {% if role.agent_type == 'claude_cli' %}selected{% endif %}>Claude CLI</option>
-                                </select>
-                            </div>
-                            <div class="form-group">
-                                <label>CLI команда</label>
-                                <div class="input-group">
-                                    <input type="text" name="cli_command" value="{{ role.cli_command }}">
-                                    <button type="button" class="btn btn-secondary" onclick="toggleBuilder(this)" title="Конструктор опций">
-                                        <i class="fas fa-sliders-h"></i>
-                                    </button>
-                                    <button type="button" class="btn btn-danger" onclick="resetToDefault(this)" title="Сбросить к стандартным">
-                                        <i class="fas fa-undo"></i>
-                                    </button>
+
+                                <div class="form-group">
+                                    <label>Файл промпта</label>
+                                    <select name="prompt_file" id="prompt-select-{{ loop.index0 }}">
+                                        <option value="">-- Выберите промпт --</option>
+                                        <!-- Options will be populated by JavaScript -->
+                                    </select>
                                 </div>
-                                <div class="cli-builder-container" style="margin-top: 10px; padding: 15px; border: 1px solid var(--border-color); border-radius: 4px; background-color: var(--bg-color); display: none;">
-                                    <!-- Builder content will be rendered here -->
+
+                                <div class="form-group">
+                                    <label>Тип агента</label>
+                                    <select name="agent_type" onchange="updateCliCommand(this)">
+                                        <option value="gemini_acp" {% if role.agent_type == 'gemini_acp' %}selected{% endif %}>Gemini (ACP)</option>
+                                        <option value="opencode_acp" {% if role.agent_type == 'opencode_acp' %}selected{% endif %}>OpenCode (ACP)</option>
+                                        <option value="qwen_acp" {% if role.agent_type == 'qwen_acp' %}selected{% endif %}>Qwen (ACP)</option>
+                                        <option value="codex_cli" {% if role.agent_type == 'codex_cli' %}selected{% endif %}>Codex CLI</option>
+                                        <option value="claude_cli" {% if role.agent_type == 'claude_cli' %}selected{% endif %}>Claude CLI</option>
+                                    </select>
                                 </div>
-                            </div>
-                            <div class="form-group">
-                                <label>Токен Telegram бота</label>
-                                <input type="text" name="telegram_bot_token" value="{{ role.telegram_bot_token }}">
-                            </div>
-                            <div class="form-group full-width">
-                                <label>Описание</label>
-                                <textarea name="description">{{ role.description }}</textarea>
+
+                                <div class="form-group">
+                                    <label>CLI команда</label>
+                                    <div class="input-group">
+                                        <input type="text" name="cli_command" value="{{ role.cli_command }}">
+                                        <button type="button" class="btn btn-secondary btn-small" onclick="toggleBuilder(this)" title="Конструктор опций">
+                                            <i class="fas fa-sliders-h"></i>
+                                        </button>
+                                        <button type="button" class="btn btn-danger btn-small" onclick="resetToDefault(this)" title="Сбросить к стандартным">
+                                            <i class="fas fa-undo"></i>
+                                        </button>
+                                    </div>
+                                    <div class="cli-builder-container">
+                                        <!-- Builder content will be rendered here -->
+                                    </div>
+                                </div>
+
+                                <div class="form-group">
+                                    <label>Токен Telegram бота</label>
+                                    <input type="text" name="telegram_bot_token" value="{{ role.telegram_bot_token }}">
+                                </div>
+
+                                <div class="form-group">
+                                    <label style="font-weight: normal; cursor: pointer; display: flex; align-items: center;">
+                                        <input type="checkbox"
+                                               style="width: auto; margin-right: 10px;"
+                                               onchange="this.closest('.role-body').querySelector('input[name=is_moderator]').value = this.checked"
+                                               {% if role.get('is_moderator') %}checked{% endif %}>
+                                        <strong>Модератор</strong>
+                                    </label>
+                                    <small class="text-muted">Имеет право останавливать автономный диалог</small>
+                                </div>
+
+                                <div class="form-group full-width">
+                                    <label>Описание</label>
+                                    <textarea name="description">{{ role.description }}</textarea>
+                                </div>
                             </div>
                         </div>
                     </div>
+                    {% endfor %}
                 </div>
-                {% endfor %}
-            </div>
-            <div class="actions">
-                <button type="button" class="btn btn-primary" onclick="addRole()"><i class="fas fa-plus"></i> Добавить роль</button>
-                <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Сохранить и перезагрузить</button>
-            </div>
-        </form>
-    </div>
 
-    <!-- Prompt Editor Modal -->
-    <div id="prompt-modal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2 id="prompt-modal-title">Редактировать системный промпт</h2>
-                <span class="close-button" onclick="closePromptModal()">&times;</span>
+                <div class="mt-2">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save"></i> Сохранить изменения
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Правая колонка - редактор промптов -->
+        <div class="prompts-panel">
+            <div class="panel-header">
+                <h2 class="panel-title">Редактор промптов</h2>
+                <div>
+                    <button onclick="openNewPromptModal()" class="btn btn-success">
+                        <i class="fas fa-plus"></i> Новый промпт
+                    </button>
+                </div>
             </div>
-            <div class="modal-body">
-                <input type="hidden" id="prompt-filepath-hidden">
-                <textarea id="prompt-editor" class="full-width"></textarea>
+
+            <div class="prompts-list">
+                <div class="prompts-header">
+                    <h3>Файлы промптов</h3>
+                </div>
+                <div id="prompts-container">
+                    <!-- Prompts will be loaded here -->
+                </div>
             </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" onclick="closePromptModal()">Отмена</button>
-                <button type="button" class="btn btn-primary" onclick="savePrompt()"><i class="fas fa-save"></i> Сохранить</button>
+
+            <div class="prompt-editor hidden" id="prompt-editor">
+                <div class="editor-header">
+                    <h3 class="editor-title" id="editor-title">Редактирование промпта</h3>
+                    <div>
+                        <button onclick="savePrompt()" class="btn btn-primary btn-small">
+                            <i class="fas fa-save"></i> Сохранить
+                        </button>
+                        <button onclick="closeEditor()" class="btn btn-secondary btn-small">
+                            <i class="fas fa-times"></i> Закрыть
+                        </button>
+                    </div>
+                </div>
+                <div class="editor-content">
+                    <textarea id="prompt-content" class="editor-textarea" placeholder="Введите содержимое промпта..."></textarea>
+                </div>
             </div>
         </div>
     </div>
 
-    <!-- New Project Modal -->
-    <div id="new-project-modal" class="modal">
-        <div class="modal-content" style="max-width: 500px;">
+    <!-- Modal for creating new prompt -->
+    <div id="new-prompt-modal" class="modal">
+        <div class="modal-content">
             <div class="modal-header">
-                <h2>Создать новый проект</h2>
-                <span class="close-button" onclick="closeNewProjectModal()">&times;</span>
+                <h2>Создать новый промпт</h2>
+                <span class="close-button" onclick="closeNewPromptModal()">&times;</span>
             </div>
             <div class="modal-body">
                 <div class="form-group">
-                    <label for="new-project-name">Имя проекта (англ, цифры, _, -)</label>
-                    <input type="text" id="new-project-name" placeholder="my_new_project">
+                    <label for="new-prompt-name">Имя файла промпта (без .md)</label>
+                    <input type="text" id="new-prompt-name" placeholder="architect_v2">
+                    <small class="text-muted">Используйте только буквы, цифры, подчеркивания и дефисы</small>
                 </div>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" onclick="closeNewProjectModal()">Отмена</button>
-                <button type="button" class="btn btn-primary" onclick="createProject()">Создать</button>
+                <button type="button" class="btn btn-secondary" onclick="closeNewPromptModal()">Отмена</button>
+                <button type="button" class="btn btn-primary" onclick="createPrompt()">Создать</button>
             </div>
         </div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
     <script>
-        const rolesContainer = document.getElementById('roles-container');
-        let sortable = new Sortable(rolesContainer, {
-            animation: 150,
-            ghostClass: 'blue-background-class',
-            handle: '.role-header' // Only drag by header
+        let currentPrompt = null;
+        let availablePrompts = [];
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            loadPrompts();
+            initializeSortable();
+            loadDarkMode();
         });
 
-        const CLI_CONFIG = {
-            'codex_cli': {
-                base: 'codex exec',
-                options: [
-                    { type: 'flag', flag: '--json', label: 'JSON Output', required: true, checked: true, description: 'Output in JSON format' },
-                    { type: 'flag', flag: '--full-auto', label: 'Full Auto', checked: true, description: 'Auto-approve safe actions' },
-                    { type: 'flag', flag: '--skip-git-repo-check', label: 'Skip Git Check', checked: true, description: 'Allow running outside git repo' },
-                    { 
-                        type: 'select', 
-                        flag: '--sandbox', 
-                        label: 'Sandbox Mode', 
-                        values: [
-                            { value: 'workspace-write', label: 'Workspace Write (Default)' },
-                            { value: 'read-only', label: 'Read Only' },
-                            { value: 'danger-full-access', label: 'Danger: Full Access' }
-                        ], 
-                        default: 'workspace-write',
-                        description: 'Sandbox security level'
-                    },
-                    { 
-                        type: 'select', 
-                        flag: '-a', 
-                        label: 'Approval Policy', 
-                        values: [
-                            { value: '', label: 'Default (based on sandbox)' },
-                            { value: 'never', label: 'Never Ask (Fully Autonomous)' },
-                            { value: 'on-failure', label: 'On Failure' },
-                            { value: 'on-request', label: 'On Request' }
-                        ], 
-                        default: '',
-                        description: 'When to ask for user approval'
-                    },
-                    { type: 'flag', flag: '--verbose', label: 'Verbose Logging', checked: false, description: 'Enable detailed logs' }
-                ]
-            },
-            'claude_cli': {
-                base: 'claude -p',
-                options: [
-                    { type: 'flag', flag: '--output-format stream-json', label: 'Stream JSON', required: true, checked: true, description: 'Required output format' },
-                    { type: 'flag', flag: '--verbose', label: 'Verbose', checked: true, description: 'Detailed logging' },
-                    { type: 'flag', flag: '--dangerously-skip-permissions', label: 'Skip Permissions', checked: true, description: 'Bypass permission checks (Required for autonomous mode)' },
-                    { 
-                        type: 'select', 
-                        flag: '--permission-mode', 
-                        label: 'Permission Mode', 
-                        values: [
-                            { value: 'bypassPermissions', label: 'Bypass Permissions' },
-                            { value: 'dontAsk', label: 'Don\'t Ask' },
-                            { value: 'default', label: 'Default' }
-                        ], 
-                        default: 'bypassPermissions',
-                        description: 'Permission handling strategy'
-                    }
-                ]
-            },
-            'qwen_acp': {
-                base: 'qwen',
-                options: [
-                    { type: 'flag', flag: '--experimental-acp', label: 'ACP Mode', required: true, checked: true, description: 'Enable Agent Client Protocol' },
-                    { type: 'flag', flag: '--debug', label: 'Debug Mode', checked: false, description: 'Enable debug output' },
-                    { type: 'flag', flag: '--yolo', label: 'YOLO Mode', checked: false, description: 'Auto-accept all actions' },
-                    { 
-                        type: 'select', 
-                        flag: '--approval-mode', 
-                        label: 'Approval Mode', 
-                        values: [
-                            { value: 'default', label: 'Default (Prompt)' },
-                            { value: 'auto-edit', label: 'Auto Edit' },
-                            { value: 'yolo', label: 'YOLO (Auto All)' }
-                        ], 
-                        default: 'default',
-                        description: 'Action approval strategy'
-                    }
-                ]
-            },
-            'gemini_acp': {
-                base: 'gemini',
-                options: [
-                    { type: 'flag', flag: '--experimental-acp', label: 'ACP Mode', required: true, checked: true, description: 'Enable Agent Client Protocol' },
-                    { type: 'flag', flag: '--debug', label: 'Debug Mode', checked: false, description: 'Enable debug output' },
-                    { type: 'flag', flag: '--yolo', label: 'YOLO Mode', checked: false, description: 'Auto-accept all actions' },
-                    { 
-                        type: 'select', 
-                        flag: '--approval-mode', 
-                        label: 'Approval Mode', 
-                        values: [
-                            { value: 'default', label: 'Default (Prompt)' },
-                            { value: 'auto_edit', label: 'Auto Edit' },
-                            { value: 'yolo', label: 'YOLO (Auto All)' }
-                        ], 
-                        default: 'default',
-                        description: 'Action approval strategy'
-                    }
-                ]
-            },
-            'opencode_acp': {
-                base: 'opencode acp',
-                options: [
-                    { type: 'flag', flag: '--print-logs', label: 'Print Logs', checked: false, description: 'Print logs to stderr' },
-                    { 
-                        type: 'select', 
-                        flag: '--log-level', 
-                        label: 'Log Level', 
-                        values: [
-                            { value: '', label: 'Default' },
-                            { value: 'DEBUG', label: 'DEBUG' },
-                            { value: 'INFO', label: 'INFO' },
-                            { value: 'WARN', label: 'WARN' },
-                            { value: 'ERROR', label: 'ERROR' }
-                        ], 
-                        default: '',
-                        description: 'Logging verbosity'
-                    }
-                ]
-            }
-        };
+        // Load available prompts
+        async function loadPrompts() {
+            try {
+                const response = await fetch('/api/prompts/list');
+                const data = await response.json();
 
-        function toggleBuilder(button) {
-            const container = button.closest('.form-group').querySelector('.cli-builder-container');
-            const roleBody = button.closest('.role-body');
-            const agentType = roleBody.querySelector('[name="agent_type"]').value;
-            
-            if (container.style.display === 'none') {
-                renderBuilder(agentType, container);
-                container.style.display = 'block';
-                button.innerHTML = '<i class="fas fa-times"></i> Скрыть опции';
-            } else {
-                container.style.display = 'none';
-                button.innerHTML = '<i class="fas fa-sliders-h"></i> Опции';
-            }
-        }
-
-        function renderBuilder(agentType, container) {
-            const config = CLI_CONFIG[agentType];
-            if (!config) {
-                container.innerHTML = '<p class="text-muted">Для этого агента нет доступных опций настройки.</p>';
-                return;
-            }
-
-            const currentCommand = container.closest('.form-group').querySelector('[name="cli_command"]').value;
-            
-            let html = '<div class="builder-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px;">';
-            
-            config.options.forEach((opt, index) => {
-                if (opt.type === 'flag') {
-                    const isChecked = currentCommand.includes(opt.flag) || (opt.required && !currentCommand) || (opt.checked && !currentCommand);
-                    const disabled = opt.required ? 'disabled' : '';
-                    const title = opt.description || '';
-                    
-                    html += `
-                        <div class="builder-item" title="${title}">
-                            <label style="font-weight: normal; cursor: pointer; display: flex; align-items: center;">
-                                <input type="checkbox" 
-                                    data-flag="${opt.flag}" 
-                                    ${isChecked ? 'checked' : ''} 
-                                    ${disabled}
-                                    onchange="updateCommandString(this.closest('.cli-builder-container'))"
-                                    style="width: auto; margin-right: 8px;">
-                                ${opt.label}
-                                ${opt.required ? '<span style="color: red; margin-left: 4px;">*</span>' : ''}
-                            </label>
-                        </div>
-                    `;
-                } else if (opt.type === 'select') {
-                    // Simple parsing to find selected value in current command
-                    let selectedValue = opt.default;
-                    // Regex to find flag value: --flag value or --flag=value
-                    // This is a basic heuristic
-                    if (currentCommand) {
-                        const regex = new RegExp(`${opt.flag}[=\\s]+([^\\s]+)`);
-                        const match = currentCommand.match(regex);
-                        if (match) {
-                            selectedValue = match[1];
-                        }
-                    }
-
-                    html += `
-                        <div class="builder-item" title="${opt.description || ''}">
-                            <label style="font-size: 0.85rem; margin-bottom: 2px;">${opt.label}</label>
-                            <select 
-                                data-flag="${opt.flag}" 
-                                onchange="updateCommandString(this.closest('.cli-builder-container'))"
-                                style="padding: 4px; font-size: 0.9rem;">
-                                <option value="">(Не задано)</option>
-                                ${opt.values.map(v => `
-                                    <option value="${v.value}" ${v.value === selectedValue ? 'selected' : ''}>${v.label}</option>
-                                `).join('')}
-                            </select>
-                        </div>
-                    `;
+                if (data.prompts) {
+                    availablePrompts = data.prompts;
+                    updatePromptsList();
+                    updatePromptSelects();
                 }
-            });
-            
-            html += '</div>';
-            container.innerHTML = html;
-        }
-
-        function updateCommandString(container) {
-            const roleBody = container.closest('.role-body');
-            const agentType = roleBody.querySelector('[name="agent_type"]').value;
-            const config = CLI_CONFIG[agentType];
-            const input = roleBody.querySelector('[name="cli_command"]');
-            
-            if (!config) return;
-
-            let commandParts = [config.base];
-            
-            // Process flags
-            container.querySelectorAll('input[type="checkbox"]').forEach(cb => {
-                if (cb.checked) {
-                    commandParts.push(cb.dataset.flag);
-                }
-            });
-
-            // Process selects
-            container.querySelectorAll('select').forEach(sel => {
-                if (sel.value) {
-                    commandParts.push(sel.dataset.flag);
-                    commandParts.push(sel.value);
-                }
-            });
-
-            input.value = commandParts.join(' ');
-        }
-
-        function resetToDefault(button) {
-            if (!confirm('Сбросить команду к рекомендованным настройкам?')) return;
-            
-            const roleBody = button.closest('.role-body');
-            const selectElement = roleBody.querySelector('[name="agent_type"]');
-            
-            // This re-triggers the update logic which applies defaults
-            updateCliCommand(selectElement);
-        }
-
-        function updateCliCommand(selectElement) {
-            const agentType = selectElement.value;
-            const roleBody = selectElement.closest('.role-body');
-            const cliCommandInput = roleBody.querySelector('[name="cli_command"]');
-            const container = roleBody.querySelector('.cli-builder-container');
-            
-            // Reset command to default constructed string
-            // We do this by rendering the builder with "empty" current command context
-            // ensuring defaults from config are applied
-            if (CLI_CONFIG[agentType]) {
-                // Temporarily clear input to force defaults in renderBuilder
-                const oldVal = cliCommandInput.value;
-                cliCommandInput.value = ''; 
-                renderBuilder(agentType, container);
-                updateCommandString(container);
-            } else {
-                cliCommandInput.value = '';
-                container.innerHTML = '';
-            }
-            
-            // If builder was open, refresh it
-            if (container.style.display !== 'none') {
-                renderBuilder(agentType, container);
+            } catch (error) {
+                console.error('Error loading prompts:', error);
             }
         }
 
-        function sanitizeBotName(roleName) {
-            if (!roleName) {
-                return 'New_Role_Bot';
-            }
-            let candidate = roleName.trim().replace(/[^A-Za-z0-9_]+/g, '_');
-            candidate = candidate.replace(/_+/g, '_').replace(/^_+|_+$/g, '');
-            if (!candidate) {
-                candidate = 'New_Role';
-            }
-            if (!candidate.toLowerCase().endsWith('_bot')) {
-                candidate += '_Bot';
-            }
-            return candidate;
-        }
+        // Update prompts list in the right panel
+        function updatePromptsList() {
+            const container = document.getElementById('prompts-container');
+            container.innerHTML = '';
 
-        function addRole() {
-            const roleName = prompt('Введите уникальное имя роли:');
-            if (roleName && !document.querySelector(`[name="role_name"][value="${roleName}"]`)) {
-                const botName = sanitizeBotName(roleName);
-                const newRole = document.createElement('div');
-                newRole.className = 'role';
-                newRole.innerHTML = `
-                    <div class="role-header">
-                        <h3 class="role-name">${roleName}</h3>
-                        <button type="button" class="btn btn-danger" onclick="removeRole(this)"><i class="fas fa-trash"></i></button>
-                    </div>
-                    <div class="role-body">
-                        <input type="hidden" name="role_name" value="${roleName}">
-                        <input type="hidden" name="telegram_bot_name" value="${botName}">
-                        <input type="hidden" name="is_moderator" value="false">
-                        <div class="form-grid">
-                            <div class="form-group full-width">
-                                <label style="font-weight: normal; cursor: pointer; display: flex; align-items: center;">
-                                    <input type="checkbox" 
-                                           style="width: auto; margin-right: 10px;"
-                                           onchange="this.closest('.role-body').querySelector('input[name=is_moderator]').value = this.checked">
-                                    <strong>Модератор</strong> &nbsp;<span class="text-muted">(имеет право останавливать автономный диалог)</span>
-                                </label>
-                            </div>
-                            <div class="form-group">
-                                <label>Отображаемое имя</label>
-                                <input type="text" name="display_name" value="">
-                            </div>
-                            <div class="form-group">
-                                <label>Файл системного промпта</label>
-                                <div class="input-group">
-                                    <input type="text" name="system_prompt_file" value="">
-                                    <button type="button" class="btn btn-secondary" onclick="editPrompt(this)">
-                                        <i class="fas fa-edit"></i>
-                                    </button>
-                                </div>
-                            </div>
-                            <div class="form-group">
-                                <label>Тип агента</label>
-                                <select name="agent_type" onchange="updateCliCommand(this)">
-                                    <option value="gemini_acp">Gemini (ACP)</option>
-                                    <option value="opencode_acp">OpenCode (ACP)</option>
-                                    <option value="qwen_acp">Qwen (ACP)</option>
-                                    <option value="codex_cli">Codex CLI</option>
-                                    <option value="claude_cli">Claude CLI</option>
-                                </select>
-                            </div>
-                            <div class="form-group">
-                                <div class="input-group">
-                                    <input type="text" name="cli_command" value="">
-                                    <button type="button" class="btn btn-secondary" onclick="toggleBuilder(this)" title="Конструктор опций">
-                                        <i class="fas fa-sliders-h"></i>
-                                    </button>
-                                    <button type="button" class="btn btn-danger" onclick="resetToDefault(this)" title="Сбросить к стандартным">
-                                        <i class="fas fa-undo"></i>
-                                    </button>
-                                </div>
-                                <div class="cli-builder-container" style="margin-top: 10px; padding: 15px; border: 1px solid var(--border-color); border-radius: 4px; background-color: var(--bg-color); display: none;">
-                                    <!-- Builder content will be rendered here -->
-                                </div>
-                            </div>
-                            <div class="form-group">
-                                <label>Токен Telegram бота</label>
-                                <input type="text" name="telegram_bot_token" value="">
-                            </div>
-                            <div class="form-group full-width">
-                                <label>Описание</label>
-                                <textarea name="description"></textarea>
-                            </div>
-                        </div>
+            availablePrompts.forEach(promptName => {
+                const promptItem = document.createElement('div');
+                promptItem.className = 'prompt-item';
+                promptItem.onclick = () => loadPrompt(promptName);
+
+                promptItem.innerHTML = `
+                    <span class="prompt-name">${promptName}.md</span>
+                    <div class="prompt-actions">
+                        <button onclick="event.stopPropagation(); deletePrompt('${promptName}')" class="btn btn-danger btn-small" title="Удалить">
+                            <i class="fas fa-trash"></i>
+                        </button>
                     </div>
                 `;
-                rolesContainer.appendChild(newRole);
-            } else if (roleName) {
-                alert('Имя роли должно быть уникальным.');
-            }
+
+                container.appendChild(promptItem);
+            });
         }
 
-        function removeRole(button) {
-            if (confirm('Вы уверены, что хотите удалить эту роль?')) {
-                button.closest('.role').remove();
-            }
+        // Update prompt selects in role forms
+        function updatePromptSelects() {
+            const selects = document.querySelectorAll('[name="prompt_file"]');
+            selects.forEach(select => {
+                const currentValue = select.value;
+                select.innerHTML = '<option value="">-- Выберите промпт --</option>';
+
+                availablePrompts.forEach(promptName => {
+                    const option = document.createElement('option');
+                    option.value = promptName;
+                    option.textContent = `${promptName}.md`;
+                    if (currentValue === promptName) {
+                        option.selected = true;
+                    }
+                    select.appendChild(option);
+                });
+            });
         }
 
-        function toggleDarkMode() {
-            document.body.classList.toggle('dark-mode');
-            const icon = document.querySelector('.dark-mode-toggle i');
-            if (document.body.classList.contains('dark-mode')) {
-                icon.classList.remove('fa-moon');
-                icon.classList.add('fa-sun');
-            } else {
-                icon.classList.remove('fa-sun');
-                icon.classList.add('fa-moon');
-            }
-        }
-
-        const modal = document.getElementById('prompt-modal');
-        const promptEditor = document.getElementById('prompt-editor');
-        const promptFilepathHidden = document.getElementById('prompt-filepath-hidden');
-
-        async function editPrompt(button) {
-            const promptFileInput = button.previousElementSibling;
-            const filepath = promptFileInput.value;
-            if (!filepath) {
-                alert('Укажите путь к файлу системного промпта.');
-                return;
-            }
-
-            promptFilepathHidden.value = filepath;
-
+        // Load prompt content
+        async function loadPrompt(promptName) {
             try {
-                const response = await fetch(`/prompt?filepath=${encodeURIComponent(filepath)}`);
-                if (!response.ok) {
-                    const error = await response.json();
-                    throw new Error(error.error || `HTTP error! status: ${response.status}`);
-                }
+                const response = await fetch(`/prompt?filepath=${promptName}.md`);
                 const data = await response.json();
-                promptEditor.value = data.content;
-                modal.style.display = 'flex';
-            } catch (e) {
-                alert(`Не удалось загрузить промпт: ${e.message}`);
+
+                if (data.content !== undefined) {
+                    currentPrompt = promptName;
+                    document.getElementById('editor-title').textContent = `Редактирование: ${promptName}.md`;
+                    document.getElementById('prompt-content').value = data.content;
+                    document.getElementById('prompt-editor').classList.remove('hidden');
+
+                    // Highlight active prompt
+                    document.querySelectorAll('.prompt-item').forEach(item => {
+                        item.classList.remove('active');
+                    });
+                    event.target.closest('.prompt-item').classList.add('active');
+                }
+            } catch (error) {
+                console.error('Error loading prompt:', error);
+                alert('Ошибка загрузки промпта');
             }
         }
 
-        function closePromptModal() {
-            modal.style.display = 'none';
-        }
-
+        // Save prompt
         async function savePrompt() {
-            const filepath = promptFilepathHidden.value;
-            const content = promptEditor.value;
+            if (!currentPrompt) return;
+
+            const content = document.getElementById('prompt-content').value;
 
             try {
                 const response = await fetch('/prompt', {
@@ -701,132 +752,190 @@
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({ filepath, content }),
+                    body: JSON.stringify({
+                        filepath: `${currentPrompt}.md`,
+                        content: content
+                    })
                 });
 
-                if (!response.ok) {
-                    const error = await response.json();
-                    throw new Error(error.error || `HTTP error! status: ${response.status}`);
-                }
-
-                alert('Промпт успешно сохранен.');
-                closePromptModal();
-            } catch (e) {
-                alert(`Не удалось сохранить промпт: ${e.message}`);
-            }
-        }
-
-        window.onclick = function(event) {
-            if (event.target == modal) {
-                closePromptModal();
-            }
-            if (event.target == document.getElementById('new-project-modal')) {
-                closeNewProjectModal();
-            }
-        }
-
-        // Project Management
-        async function loadProjects() {
-            try {
-                const response = await fetch('/api/projects/list');
                 const data = await response.json();
-                
-                if (data.error) {
-                    console.error('Error loading projects:', data.error);
-                    return;
+
+                if (data.message) {
+                    alert('Промпт сохранён успешно');
+                    loadPrompts(); // Refresh list
+                } else {
+                    alert('Ошибка сохранения: ' + (data.error || 'Unknown error'));
                 }
-                
-                const selector = document.getElementById('project-selector');
-                selector.innerHTML = '';
-                
-                data.projects.forEach(proj => {
-                    const option = document.createElement('option');
-                    option.value = proj;
-                    option.textContent = proj;
-                    if (proj === data.current_project) {
-                        option.selected = true;
-                    }
-                    selector.appendChild(option);
-                });
-            } catch (e) {
-                console.error('Failed to load projects:', e);
+            } catch (error) {
+                console.error('Error saving prompt:', error);
+                alert('Ошибка сохранения промпта');
             }
         }
 
-        async function switchProject(projectName) {
-            if (!confirm(`Переключиться на проект "${projectName}"? Страница будет перезагружена.`)) {
-                // Revert selection if cancelled
-                loadProjects(); 
+        // Create new prompt
+        async function createPrompt() {
+            const promptName = document.getElementById('new-prompt-name').value.trim();
+
+            if (!promptName) {
+                alert('Введите имя промпта');
                 return;
             }
-            
+
             try {
-                const response = await fetch('/api/projects/switch', {
+                const response = await fetch('/api/prompts/create', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ project_name: projectName })
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        prompt_name: promptName
+                    })
                 });
-                
-                const result = await response.json();
-                
-                if (result.success) {
-                    window.location.reload();
+
+                const data = await response.json();
+
+                if (data.success) {
+                    closeNewPromptModal();
+                    document.getElementById('new-prompt-name').value = '';
+                    loadPrompts();
+                    loadPrompt(promptName); // Open the new prompt for editing
                 } else {
-                    alert('Ошибка: ' + (result.error || 'Unknown error'));
-                    loadProjects(); // Revert selection
+                    alert('Ошибка создания: ' + (data.error || 'Unknown error'));
                 }
-            } catch (e) {
-                alert('Ошибка сети: ' + e.message);
-                loadProjects();
+            } catch (error) {
+                console.error('Error creating prompt:', error);
+                alert('Ошибка создания промпта');
             }
         }
 
-        function openNewProjectModal() {
-            document.getElementById('new-project-modal').style.display = 'flex';
-            document.getElementById('new-project-name').focus();
-        }
+        // Delete prompt
+        async function deletePrompt(promptName) {
+            if (!confirm(`Удалить промпт "${promptName}.md"?`)) return;
 
-        function closeNewProjectModal() {
-            document.getElementById('new-project-modal').style.display = 'none';
-        }
-
-        async function createProject() {
-            const nameInput = document.getElementById('new-project-name');
-            const projectName = nameInput.value.trim();
-            
-            if (!projectName) {
-                alert('Введите имя проекта');
-                return;
-            }
-            
             try {
-                const response = await fetch('/api/projects/create', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ project_name: projectName })
-                });
-                
-                const result = await response.json();
-                
-                if (result.success) {
-                    alert(`Проект "${projectName}" создан!`);
-                    closeNewProjectModal();
-                    window.location.reload();
-                } else {
-                    alert('Ошибка: ' + (result.error || 'Unknown error'));
-                }
-            } catch (e) {
-                alert('Ошибка сети: ' + e.message);
+                // For now, we'll just remove from the list. In a real implementation,
+                // you'd need a delete endpoint
+                alert('Удаление промптов пока не реализовано в API');
+            } catch (error) {
+                console.error('Error deleting prompt:', error);
             }
         }
 
-        // Initialize projects on load
-        document.addEventListener('DOMContentLoaded', loadProjects);
+        // Modal functions
+        function openNewPromptModal() {
+            document.getElementById('new-prompt-modal').style.display = 'block';
+        }
 
-        document.body.classList.add('dark-mode');
-        document.querySelector('.dark-mode-toggle i').classList.remove('fa-moon');
-        document.querySelector('.dark-mode-toggle i').classList.add('fa-sun');
+        function closeNewPromptModal() {
+            document.getElementById('new-prompt-modal').style.display = 'none';
+        }
 
+        function closeEditor() {
+            document.getElementById('prompt-editor').classList.add('hidden');
+            currentPrompt = null;
+            document.querySelectorAll('.prompt-item').forEach(item => {
+                item.classList.remove('active');
+            });
+        }
+
+        // Role management
+        function addRole() {
+            // This would need to be implemented - for now just show a message
+            alert('Добавление ролей пока не реализовано в новом интерфейсе');
+        }
+
+        function removeRole(button) {
+            if (confirm('Удалить эту роль?')) {
+                button.closest('.role').remove();
+            }
+        }
+
+        // Sortable roles
+        function initializeSortable() {
+            const container = document.getElementById('roles-container');
+            if (container) {
+                Sortable.create(container, {
+                    animation: 150,
+                    ghostClass: 'blue-background-class',
+                    handle: '.role-header'
+                });
+            }
+        }
+
+        // CLI Builder functions
+        function toggleBuilder(button) {
+            const container = button.closest('.form-group').querySelector('.cli-builder-container');
+            container.style.display = container.style.display === 'none' ? 'block' : 'none';
+        }
+
+        function resetToDefault(button) {
+            // Reset CLI command to default based on agent type
+            const formGroup = button.closest('.form-group');
+            const agentType = formGroup.closest('.role-body').querySelector('[name="agent_type"]').value;
+            const cliInput = formGroup.querySelector('[name="cli_command"]');
+
+            const defaults = {
+                'gemini_acp': 'gemini',
+                'opencode_acp': 'opencode acp',
+                'qwen_acp': 'qwen',
+                'codex_cli': 'codex',
+                'claude_cli': 'claude'
+            };
+
+            cliInput.value = defaults[agentType] || '';
+        }
+
+        function updateCliCommand(select) {
+            const agentType = select.value;
+            const cliInput = select.closest('.role-body').querySelector('[name="cli_command"]');
+
+            if (!cliInput.value) {
+                const defaults = {
+                    'gemini_acp': 'gemini',
+                    'opencode_acp': 'opencode acp',
+                    'qwen_acp': 'qwen',
+                    'codex_cli': 'codex',
+                    'claude_cli': 'claude'
+                };
+                cliInput.value = defaults[agentType] || '';
+            }
+        }
+
+        // Dark mode
+        function toggleDarkMode() {
+            document.body.classList.toggle('dark-mode');
+            const icon = document.querySelector('.dark-mode-toggle i');
+
+            if (document.body.classList.contains('dark-mode')) {
+                icon.classList.remove('fa-moon');
+                icon.classList.add('fa-sun');
+                localStorage.setItem('darkMode', 'true');
+            } else {
+                icon.classList.remove('fa-sun');
+                icon.classList.add('fa-moon');
+                localStorage.setItem('darkMode', 'false');
+            }
+        }
+
+        function loadDarkMode() {
+            const darkMode = localStorage.getItem('darkMode') === 'true';
+            if (darkMode) {
+                document.body.classList.add('dark-mode');
+                const icon = document.querySelector('.dark-mode-toggle i');
+                icon.classList.remove('fa-moon');
+                icon.classList.add('fa-sun');
+            }
+        }
+
+        // Close modals when clicking outside
+        window.onclick = function(event) {
+            const modals = document.querySelectorAll('.modal');
+            modals.forEach(modal => {
+                if (event.target === modal) {
+                    modal.style.display = 'none';
+                }
+            });
+        };
     </script>
 </body>
 </html>

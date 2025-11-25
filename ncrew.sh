@@ -110,35 +110,12 @@ setup_configuration() {
     if [[ ! -f ".env" ]]; then
         print_info "Creating .env file from template..."
         cp .env.example .env
-        print_warning "Please edit .env file with your configuration:"
-        print_warning "  • MAIN_BOT_TOKEN - Your main Telegram bot token"
-        print_warning "  • TARGET_CHAT_ID - Your target chat ID"
-        print_warning "  • Role bot tokens (SOFTWAREDEVBOT_TOKEN, etc.)"
-        print_warning "  • GEMINI_API_KEY - Optional Gemini API key"
-        echo ""
-        print_info "Edit .env with: nano .env or vim .env"
-        return 1
+        print_success "Created .env file with default settings"
     fi
 
-    # Validate .env file has required tokens
-    if [[ -f ".env" ]]; then
-        # Check if MAIN_BOT_TOKEN is configured
-        if grep -q "your_main_listener_bot_token_here" .env; then
-            print_error "MAIN_BOT_TOKEN not configured in .env"
-            return 1
-        fi
-
-        # Check if TARGET_CHAT_ID is configured
-        if grep -q "your_target_group_chat_id_here" .env; then
-            print_error "TARGET_CHAT_ID not configured in .env"
-            return 1
-        fi
-
-        print_success "Configuration file exists and appears configured"
-        return 0
-    fi
-
-    return 1
+    # Configuration validation will be done by the application
+    print_success "Configuration files are ready"
+    return 0
 }
 
 # Start application

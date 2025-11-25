@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NeuroCrew Lab - Initial Setup</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --bg-color: #f8f9fa;
+            --text-color: #212529;
+            --card-bg: #ffffff;
+            --border-color: #dee2e6;
+            --primary-color: #007bff;
+            --secondary-color: #6c757d;
+            --success-color: #28a745;
+            --danger-color: #dc3545;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: var(--text-color);
+            min-height: 100vh;
+            margin: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .setup-container {
+            background: var(--card-bg);
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            padding: 2rem;
+            max-width: 500px;
+            width: 100%;
+            margin: 2rem;
+        }
+
+        .setup-header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        .setup-logo {
+            font-size: 3rem;
+            color: var(--primary-color);
+            margin-bottom: 1rem;
+        }
+
+        .setup-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            color: var(--text-color);
+        }
+
+        .setup-subtitle {
+            color: var(--secondary-color);
+            margin-bottom: 0;
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .form-label {
+            display: block;
+            font-weight: 500;
+            margin-bottom: 0.5rem;
+            color: var(--text-color);
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            font-size: 1rem;
+            background: var(--card-bg);
+            color: var(--text-color);
+            box-sizing: border-box;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+        }
+
+        .mode-selector {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .mode-option {
+            border: 2px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1rem;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            background: var(--card-bg);
+        }
+
+        .mode-option:hover {
+            border-color: var(--primary-color);
+        }
+
+        .mode-option.selected {
+            border-color: var(--primary-color);
+            background: rgba(0, 123, 255, 0.05);
+        }
+
+        .mode-icon {
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+            display: block;
+        }
+
+        .mode-title {
+            font-weight: 600;
+            margin-bottom: 0.25rem;
+        }
+
+        .mode-description {
+            font-size: 0.9rem;
+            color: var(--secondary-color);
+        }
+
+        .telegram-fields {
+            display: none;
+            margin-top: 1rem;
+            padding: 1rem;
+            background: var(--bg-color);
+            border-radius: 6px;
+        }
+
+        .telegram-fields.show {
+            display: block;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            border: none;
+            border-radius: 6px;
+            font-size: 1rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .btn-primary {
+            background: var(--primary-color);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #0056b3;
+        }
+
+        .btn:disabled {
+            background: var(--secondary-color);
+            cursor: not-allowed;
+        }
+
+        .alert {
+            padding: 0.75rem;
+            border-radius: 6px;
+            margin-bottom: 1rem;
+            display: none;
+        }
+
+        .alert-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .alert-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            margin-top: 1rem;
+        }
+
+        .spinner {
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid var(--primary-color);
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+            margin-right: 0.5rem;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="setup-container">
+        <div class="setup-header">
+            <div class="setup-logo">
+                <i class="fas fa-robot"></i>
+            </div>
+            <h1 class="setup-title">NeuroCrew Lab</h1>
+            <p class="setup-subtitle">Настройка первого проекта</p>
+        </div>
+
+        <div id="alert" class="alert"></div>
+
+        <form id="setup-form">
+            <div class="form-group">
+                <label class="form-label" for="project-name">Название проекта</label>
+                <input type="text" id="project-name" class="form-input" placeholder="my-project" required>
+                <small style="color: var(--secondary-color);">Только буквы, цифры, дефисы и подчеркивания</small>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Режим работы</label>
+                <div class="mode-selector">
+                    <div class="mode-option selected" data-mode="web_only">
+                        <i class="fas fa-globe mode-icon"></i>
+                        <div class="mode-title">Web-only</div>
+                        <div class="mode-description">Только веб-интерфейс</div>
+                    </div>
+                    <div class="mode-option" data-mode="full">
+                        <i class="fas fa-comments mode-icon"></i>
+                        <div class="mode-title">Full</div>
+                        <div class="mode-description">Web + Telegram</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="telegram-fields" id="telegram-fields">
+                <div class="form-group">
+                    <label class="form-label" for="main-bot-token">Telegram Bot Token</label>
+                    <input type="password" id="main-bot-token" class="form-input" placeholder="123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11">
+                    <small style="color: var(--secondary-color);">Получите токен у @BotFather</small>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="target-chat-id">Chat ID</label>
+                    <input type="number" id="target-chat-id" class="form-input" placeholder="123456789">
+                    <small style="color: var(--secondary-color);">ID группового чата для работы бота</small>
+                </div>
+            </div>
+
+            <button type="submit" class="btn btn-primary" id="submit-btn">
+                <i class="fas fa-rocket"></i> Создать проект
+            </button>
+        </form>
+
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            Создание проекта...
+        </div>
+    </div>
+
+    <script>
+        let selectedMode = 'web_only';
+
+        // Mode selection
+        document.querySelectorAll('.mode-option').forEach(option => {
+            option.addEventListener('click', function() {
+                document.querySelectorAll('.mode-option').forEach(opt => opt.classList.remove('selected'));
+                this.classList.add('selected');
+                selectedMode = this.dataset.mode;
+
+                const telegramFields = document.getElementById('telegram-fields');
+                if (selectedMode === 'full') {
+                    telegramFields.classList.add('show');
+                } else {
+                    telegramFields.classList.remove('show');
+                }
+            });
+        });
+
+        // Form submission
+        document.getElementById('setup-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+
+            const submitBtn = document.getElementById('submit-btn');
+            const loading = document.getElementById('loading');
+            const alert = document.getElementById('alert');
+
+            // Get form data
+            const projectName = document.getElementById('project-name').value.trim();
+            const mainBotToken = document.getElementById('main-bot-token').value.trim();
+            const targetChatId = document.getElementById('target-chat-id').value.trim();
+
+            // Validation
+            if (!projectName) {
+                showAlert('Введите название проекта', 'error');
+                return;
+            }
+
+            if (!/^[a-zA-Z0-9_-]+$/.test(projectName)) {
+                showAlert('Название проекта может содержать только буквы, цифры, дефисы и подчеркивания', 'error');
+                return;
+            }
+
+            if (selectedMode === 'full') {
+                if (!mainBotToken) {
+                    showAlert('Введите токен Telegram бота', 'error');
+                    return;
+                }
+                if (!targetChatId || isNaN(targetChatId)) {
+                    showAlert('Введите корректный Chat ID', 'error');
+                    return;
+                }
+            }
+
+            // Show loading
+            submitBtn.disabled = true;
+            loading.style.display = 'block';
+            alert.style.display = 'none';
+
+            try {
+                const response = await fetch('/api/create-project', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        project_name: projectName,
+                        mode: selectedMode,
+                        main_bot_token: mainBotToken,
+                        target_chat_id: parseInt(targetChatId) || 0
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showAlert(`Проект "${projectName}" создан успешно!`, 'success');
+                    setTimeout(() => {
+                        window.location.href = data.redirect_url;
+                    }, 2000);
+                } else {
+                    showAlert(data.error || 'Ошибка создания проекта', 'error');
+                }
+            } catch (error) {
+                showAlert('Ошибка сети. Попробуйте еще раз.', 'error');
+            } finally {
+                submitBtn.disabled = false;
+                loading.style.display = 'none';
+            }
+        });
+
+        function showAlert(message, type) {
+            const alert = document.getElementById('alert');
+            alert.textContent = message;
+            alert.className = `alert alert-${type}`;
+            alert.style.display = 'block';
+        }
+
+        // Check status on load
+        window.addEventListener('load', async function() {
+            try {
+                const response = await fetch('/api/check-status');
+                const data = await response.json();
+
+                if (data.has_projects) {
+                    // Projects exist, redirect to main app
+                    window.location.href = 'http://localhost:8080';
+                }
+            } catch (error) {
+                // Ignore errors, continue with setup
+            }
+        });
+    </script>
+</body>
+</html>

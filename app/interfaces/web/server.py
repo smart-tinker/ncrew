@@ -105,11 +105,11 @@ def get_roles():
     project = multi_project_manager.get_project(project_name)
     if not project:
         return []
-    
+
     config_data = project.load_config()
     roles = config_data.get("roles", [])
-    
-    # Ensure all tokens are loaded (if we wanted to load from .env we would do it here, 
+
+    # Ensure all tokens are loaded (if we wanted to load from .env we would do it here,
     # but we prefer everything in config now)
     return roles
 
@@ -120,9 +120,9 @@ def save_roles(roles):
     project = multi_project_manager.get_project(project_name)
     if not project:
         return
-    
+
     config_data = project.load_config()
-    
+
     # Filter roles to only include allowed fields
     sanitized_roles = []
     for role in roles:
@@ -132,7 +132,7 @@ def save_roles(roles):
             if role.get(key) is not None
         }
         sanitized_roles.append(sanitized_role)
-    
+
     config_data["roles"] = sanitized_roles
     project.save_config(config_data)
 
@@ -142,7 +142,7 @@ def inject_projects():
     """Inject project list and current project into all templates."""
     return {
         "projects": multi_project_manager.list_projects(),
-        "current_project": multi_project_manager.get_current_project()
+        "current_project": multi_project_manager.get_current_project(),
     }
 
 
@@ -154,7 +154,9 @@ def chat_page():
     project_name = request.args.get("project")
     if project_name:
         current = multi_project_manager.get_current_project()
-        if project_name != current and multi_project_manager.project_exists(project_name):
+        if project_name != current and multi_project_manager.project_exists(
+            project_name
+        ):
             try:
                 multi_project_manager.load_project_config(project_name)
                 # Redirect to remove query param after switching
@@ -162,7 +164,7 @@ def chat_page():
             except Exception as e:
                 app.logger.error(f"Failed to switch project: {e}")
                 # Fallback to current project
-    
+
     return render_template("chat.html")
 
 
@@ -181,7 +183,7 @@ def save():
     role_names = request.form.getlist("role_name")
     display_names = request.form.getlist("display_name")
     telegram_bot_names = request.form.getlist("telegram_bot_name")
-    prompt_files = request.form.getlist("system_prompt_file")
+    prompt_files = request.form.getlist("prompt_file")
     agent_types = request.form.getlist("agent_type")
     cli_commands = request.form.getlist("cli_command")
     descriptions = request.form.getlist("description")
@@ -226,7 +228,9 @@ def save():
             "role_name": role_name,
             "display_name": display_names[i] if i < len(display_names) else "",
             "telegram_bot_name": telegram_bot_name,
-            "prompt_file": prompt_files[i] if i < len(prompt_files) else "", # Changed system_prompt_file to prompt_file to match Config
+            "prompt_file": prompt_files[i]
+            if i < len(prompt_files)
+            else "",  # Changed system_prompt_file to prompt_file to match Config
             "agent_type": agent_types[i] if i < len(agent_types) else "",
             "cli_command": cli_commands[i] if i < len(cli_commands) else "",
             "description": descriptions[i] if i < len(descriptions) else "",
@@ -242,6 +246,7 @@ def save():
     # Hot-reload configuration without service interruption
     try:
         from app.config import Config
+
         success = Config.reload_configuration(Config.PROJECT_NAME)
         if success:
             app.logger.info("🔄 Configuration hot-reloaded successfully")
@@ -263,18 +268,20 @@ def get_prompt():
     try:
         # Load from shared prompts dir
         prompts_dir = multi_project_manager.get_prompts_dir()
-        prompt_name = Path(filepath).name # filepath in request is likely just the filename or partial path
-        
+        prompt_name = Path(
+            filepath
+        ).name  # filepath in request is likely just the filename or partial path
+
         # Security check: prompt should be in prompts_dir
         # Actually multi_project_manager.load_prompt expects prompt_name (filename without ext or with?)
         # Let's use load_prompt logic but adapted.
         # The frontend likely sends just filename
-        
+
         content = multi_project_manager.load_prompt(prompt_name.replace(".md", ""))
-        
+
         if content is None:
-             return jsonify({"error": "File not found"}), 404
-             
+            return jsonify({"error": "File not found"}), 404
+
         return jsonify({"content": content})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -294,8 +301,57 @@ def save_prompt():
         # Save to shared prompts dir
         prompt_name = Path(filepath).stem
         multi_project_manager.save_prompt(prompt_name, content)
-        
+
         return jsonify({"message": "File saved successfully"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/prompts/list", methods=["GET"])
+@requires_auth
+def list_prompts():
+    """List all available prompt files."""
+    try:
+        prompts = multi_project_manager.list_prompts()
+        return jsonify({"prompts": prompts})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/prompts/create", methods=["POST"])
+@requires_auth
+def create_prompt():
+    """Create a new prompt file."""
+    data = request.json
+    prompt_name = data.get("prompt_name")
+
+    if not prompt_name:
+        return jsonify({"error": "Prompt name is required"}), 400
+
+    # Basic validation for prompt name
+    if not re.match(r"^[a-zA-Z0-9_-]+$", prompt_name):
+        return jsonify(
+            {
+                "error": "Invalid prompt name. Use only letters, numbers, underscores, and hyphens."
+            }
+        ), 400
+
+    try:
+        # Check if prompt already exists
+        existing_prompts = multi_project_manager.list_prompts()
+        if prompt_name in existing_prompts:
+            return jsonify({"error": f"Prompt '{prompt_name}' already exists"}), 400
+
+        # Create empty prompt file
+        multi_project_manager.save_prompt(prompt_name, "")
+
+        return jsonify(
+            {
+                "success": True,
+                "message": f"Prompt '{prompt_name}' created successfully",
+                "prompt_name": prompt_name,
+            }
+        )
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -324,12 +380,16 @@ def get_chat_history():
         # Format messages for frontend
         messages = []
         for msg in conversation:
-            messages.append({
-                "role": msg.get("role", "unknown"),
-                "role_display": msg.get("role_display") or msg.get("display_name") or msg.get("role", "Unknown"),
-                "text": msg.get("text") or msg.get("content", ""),
-                "timestamp": msg.get("timestamp", ""),
-            })
+            messages.append(
+                {
+                    "role": msg.get("role", "unknown"),
+                    "role_display": msg.get("role_display")
+                    or msg.get("display_name")
+                    or msg.get("role", "Unknown"),
+                    "text": msg.get("text") or msg.get("content", ""),
+                    "timestamp": msg.get("timestamp", ""),
+                }
+            )
 
         return jsonify({"messages": messages, "total": len(messages)})
 
@@ -359,16 +419,22 @@ def get_chat_updates():
         loop.close()
 
         # Get only new messages
-        new_messages = conversation[last_index:] if last_index < len(conversation) else []
+        new_messages = (
+            conversation[last_index:] if last_index < len(conversation) else []
+        )
 
         messages = []
         for msg in new_messages:
-            messages.append({
-                "role": msg.get("role", "unknown"),
-                "role_display": msg.get("role_display") or msg.get("display_name") or msg.get("role", "Unknown"),
-                "text": msg.get("text") or msg.get("content", ""),
-                "timestamp": msg.get("timestamp", ""),
-            })
+            messages.append(
+                {
+                    "role": msg.get("role", "unknown"),
+                    "role_display": msg.get("role_display")
+                    or msg.get("display_name")
+                    or msg.get("role", "Unknown"),
+                    "text": msg.get("text") or msg.get("content", ""),
+                    "timestamp": msg.get("timestamp", ""),
+                }
+            )
 
         return jsonify({"messages": messages})
 
@@ -437,6 +503,7 @@ def send_chat_message():
         except Exception as engine_error:
             # Log but don't fail the request - message was stored
             import logging
+
             logging.warning(f"Engine processing error: {engine_error}")
 
         loop.close()
@@ -455,10 +522,7 @@ def list_projects():
     try:
         projects = multi_project_manager.list_projects()
         current_project = multi_project_manager.get_current_project()
-        return jsonify({
-            "projects": projects,
-            "current_project": current_project
-        })
+        return jsonify({"projects": projects, "current_project": current_project})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -469,28 +533,34 @@ def create_project():
     """Create a new project."""
     data = request.json
     project_name = data.get("project_name")
-    
+
     if not project_name:
         return jsonify({"error": "Project name is required"}), 400
-        
+
     # Basic validation for project name (alphanumeric + underscores/hyphens)
     if not re.match(r"^[a-zA-Z0-9_-]+$", project_name):
-         return jsonify({"error": "Invalid project name. Use only letters, numbers, underscores, and hyphens."}), 400
+        return jsonify(
+            {
+                "error": "Invalid project name. Use only letters, numbers, underscores, and hyphens."
+            }
+        ), 400
 
     try:
         if multi_project_manager.project_exists(project_name):
             return jsonify({"error": f"Project '{project_name}' already exists"}), 400
-            
+
         multi_project_manager.create_project(project_name)
-        
+
         # Switch to the new project
         multi_project_manager.load_project_config(project_name)
-        
-        return jsonify({
-            "success": True, 
-            "message": f"Project '{project_name}' created and activated",
-            "project_name": project_name
-        })
+
+        return jsonify(
+            {
+                "success": True,
+                "message": f"Project '{project_name}' created and activated",
+                "project_name": project_name,
+            }
+        )
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -501,21 +571,23 @@ def switch_project():
     """Switch to a different project."""
     data = request.json
     project_name = data.get("project_name")
-    
+
     if not project_name:
         return jsonify({"error": "Project name is required"}), 400
 
     try:
         if not multi_project_manager.project_exists(project_name):
             return jsonify({"error": f"Project '{project_name}' not found"}), 404
-            
+
         multi_project_manager.load_project_config(project_name)
-        
-        return jsonify({
-            "success": True, 
-            "message": f"Switched to project '{project_name}'",
-            "project_name": project_name
-        })
+
+        return jsonify(
+            {
+                "success": True,
+                "message": f"Switched to project '{project_name}'",
+                "project_name": project_name,
+            }
+        )
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
