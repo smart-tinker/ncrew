@@ -1,10 +1,8 @@
-<!DOCTYPE html>
-<html lang="ru">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NeuroCrew Lab - Веб-чат</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+{% extends "base.html" %}
+
+{% block title %}NeuroCrew Lab - Веб-чат{% endblock %}
+
+{% block extra_css %}
     <style>
         :root {
             --bg-color: #f8f9fa;
@@ -27,23 +25,11 @@
             --user-bg: #1a3a52;
             --agent-bg: #2d2d2d;
         }
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-            background-color: var(--bg-color);
-            color: var(--text-color);
-            line-height: 1.5;
-        }
         .chat-container {
             display: flex;
             flex-direction: column;
-            height: 100vh;
-            max-width: 1000px;
-            margin: 0 auto;
+            height: 100%; 
+            width: 100%;
             background-color: var(--bg-color);
         }
         .chat-header {
@@ -262,8 +248,9 @@
             color: #f8d7da;
         }
     </style>
-</head>
-<body>
+{% endblock %}
+
+{% block content %}
     <div class="chat-container">
         <!-- Header -->
         <div class="chat-header">
@@ -274,12 +261,6 @@
                 <button class="dark-mode-toggle" onclick="toggleDarkMode()" title="Переключить тему">
                     <i class="fas fa-moon"></i>
                 </button>
-                <a href="/" class="back-button" title="Выбрать другой тип консультации">
-                    <i class="fas fa-arrow-left"></i> Все консультации
-                </a>
-                <a href="/settings" class="back-button" title="Настройки">
-                    <i class="fas fa-cog"></i> Настройки
-                </a>
             </div>
         </div>
 
@@ -317,7 +298,9 @@
             </div>
         </div>
     </div>
+{% endblock %}
 
+{% block scripts %}
     <script>
         const messagesContainer = document.getElementById('messagesContainer');
         const messageInput = document.getElementById('messageInput');
@@ -569,5 +552,4 @@
         loadDarkModePreference();
         init();
     </script>
-</body>
-</html>
+{% endblock %}

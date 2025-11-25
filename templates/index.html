@@ -1,10 +1,8 @@
-<!DOCTYPE html>
-<html lang="ru">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NeuroCrew Lab - Настройки</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+{% extends "base.html" %}
+
+{% block title %}NeuroCrew Lab - Настройки{% endblock %}
+
+{% block extra_css %}
     <style>
         :root {
             --bg-color: #f8f9fa;
@@ -23,14 +21,9 @@
             --border-color: #495057;
             --header-bg: #495057;
         }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-            background-color: var(--bg-color);
-            color: var(--text-color);
-            line-height: 1.5;
-            margin: 0;
-            padding: 0;
-        }
+        /* Overwriting body styles from index.html is not needed as base.html handles it, 
+           but we need to ensure variables are applied to the content area */
+        
         .container { max-width: 960px; margin: 0 auto; padding: 20px; }
         h1 { text-align: center; margin-bottom: 2rem; }
         .role {
@@ -97,12 +90,7 @@
         .btn-secondary { background-color: var(--secondary-color); color: white; }
         .btn-danger { background-color: var(--danger-color); color: white; }
         .actions { text-align: center; margin-top: 2rem; }
-        .dark-mode-toggle {
-            position: absolute;
-            top: 20px;
-            right: 20px;
-            cursor: pointer;
-        }
+        
         /* Modal Styles */
         .modal {
             display: none;
@@ -136,98 +124,115 @@
         #prompt-editor { height: 400px; }
         .modal-footer { text-align: right; border-top: 1px solid var(--border-color); padding-top: 1rem; margin-top: 1rem; }
         .modal-footer .btn { margin-left: 0.5rem; }
-
+        
+        .settings-scroll-area {
+            height: 100%;
+            overflow-y: auto;
+        }
+        
+        /* Dark mode toggle positioning in settings content */
+        .settings-header {
+             display: flex; 
+             justify-content: space-between; 
+             align-items: center; 
+             margin-bottom: 2rem;
+        }
+        .settings-dark-mode {
+             cursor: pointer;
+             font-size: 1.2rem;
+        }
     </style>
-</head>
-<body>
-    <div class="container">
-        <div class="dark-mode-toggle" onclick="toggleDarkMode()">
-            <i class="fas fa-moon"></i>
-        </div>
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
-            <h1><i class="fas fa-cog"></i> NeuroCrew Lab - Настройки</h1>
-            <a href="/" style="padding: 0.75rem 1.5rem; background-color: #28a745; color: white; text-decoration: none; border-radius: 4px; display: flex; align-items: center; gap: 0.5rem; font-weight: 600;">
-                <i class="fas fa-comments"></i> К чату
-            </a>
-        </div>
-        <form action="/save" method="post" id="roles-form">
-            <div id="roles-container">
-                {% for role in roles %}
-                <div class="role" data-id="{{ loop.index0 }}">
-                    <div class="role-header">
-                        <h3 class="role-name">{{ role.role_name }}</h3>
-                        <button type="button" class="btn btn-danger" onclick="removeRole(this)"><i class="fas fa-trash"></i></button>
-                    </div>
-                    <div class="role-body">
-                        <input type="hidden" name="role_name" value="{{ role.role_name }}">
-                        <input type="hidden" name="telegram_bot_name" value="{{ role.telegram_bot_name }}">
-                        <input type="hidden" name="is_moderator" value="{{ 'true' if role.get('is_moderator') else 'false' }}">
-                        <div class="form-grid">
-                            <div class="form-group full-width">
-                                <label style="font-weight: normal; cursor: pointer; display: flex; align-items: center;">
-                                    <input type="checkbox" 
-                                           style="width: auto; margin-right: 10px;"
-                                           onchange="this.closest('.role-body').querySelector('input[name=is_moderator]').value = this.checked"
-                                           {% if role.get('is_moderator') %}checked{% endif %}>
-                                    <strong>Модератор</strong> &nbsp;<span class="text-muted">(имеет право останавливать автономный диалог)</span>
-                                </label>
-                            </div>
-                            <div class="form-group">
-                                <label>Отображаемое имя</label>
-                                <input type="text" name="display_name" value="{{ role.display_name }}">
-                            </div>
-                            <div class="form-group">
-                                <label>Файл системного промпта</label>
-                                <div class="input-group">
-                                    <input type="text" name="system_prompt_file" value="{{ role.system_prompt_file }}">
-                                    <button type="button" class="btn btn-secondary" id="edit-prompt-btn-{{ loop.index0 }}" onclick="editPrompt(this)">
-                                        <i class="fas fa-edit"></i>
-                                    </button>
+{% endblock %}
+
+{% block content %}
+    <div class="settings-scroll-area">
+        <div class="container">
+            <div class="settings-header">
+                <h1><i class="fas fa-cog"></i> NeuroCrew Lab - Настройки</h1>
+                <div class="settings-dark-mode" onclick="toggleDarkMode()">
+                    <i class="fas fa-moon"></i>
+                </div>
+            </div>
+            
+            <form action="/save" method="post" id="roles-form">
+                <div id="roles-container">
+                    {% for role in roles %}
+                    <div class="role" data-id="{{ loop.index0 }}">
+                        <div class="role-header">
+                            <h3 class="role-name">{{ role.role_name }}</h3>
+                            <button type="button" class="btn btn-danger" onclick="removeRole(this)"><i class="fas fa-trash"></i></button>
+                        </div>
+                        <div class="role-body">
+                            <input type="hidden" name="role_name" value="{{ role.role_name }}">
+                            <input type="hidden" name="telegram_bot_name" value="{{ role.telegram_bot_name }}">
+                            <input type="hidden" name="is_moderator" value="{{ 'true' if role.get('is_moderator') else 'false' }}">
+                            <div class="form-grid">
+                                <div class="form-group full-width">
+                                    <label style="font-weight: normal; cursor: pointer; display: flex; align-items: center;">
+                                        <input type="checkbox" 
+                                               style="width: auto; margin-right: 10px;"
+                                               onchange="this.closest('.role-body').querySelector('input[name=is_moderator]').value = this.checked"
+                                               {% if role.get('is_moderator') %}checked{% endif %}>
+                                        <strong>Модератор</strong> &nbsp;<span class="text-muted">(имеет право останавливать автономный диалог)</span>
+                                    </label>
                                 </div>
-                            </div>
-                            <div class="form-group">
-                                <label>Тип агента</label>
-                                <select name="agent_type" onchange="updateCliCommand(this)">
-                                    <option value="gemini_acp" {% if role.agent_type == 'gemini_acp' %}selected{% endif %}>Gemini (ACP)</option>
-                                    <option value="opencode_acp" {% if role.agent_type == 'opencode_acp' %}selected{% endif %}>OpenCode (ACP)</option>
-                                    <option value="qwen_acp" {% if role.agent_type == 'qwen_acp' %}selected{% endif %}>Qwen (ACP)</option>
-                                    <option value="codex_cli" {% if role.agent_type == 'codex_cli' %}selected{% endif %}>Codex CLI</option>
-                                    <option value="claude_cli" {% if role.agent_type == 'claude_cli' %}selected{% endif %}>Claude CLI</option>
-                                </select>
-                            </div>
-                            <div class="form-group">
-                                <label>CLI команда</label>
-                                <div class="input-group">
-                                    <input type="text" name="cli_command" value="{{ role.cli_command }}">
-                                    <button type="button" class="btn btn-secondary" onclick="toggleBuilder(this)" title="Конструктор опций">
-                                        <i class="fas fa-sliders-h"></i>
-                                    </button>
-                                    <button type="button" class="btn btn-danger" onclick="resetToDefault(this)" title="Сбросить к стандартным">
-                                        <i class="fas fa-undo"></i>
-                                    </button>
+                                <div class="form-group">
+                                    <label>Отображаемое имя</label>
+                                    <input type="text" name="display_name" value="{{ role.display_name }}">
                                 </div>
-                                <div class="cli-builder-container" style="margin-top: 10px; padding: 15px; border: 1px solid var(--border-color); border-radius: 4px; background-color: var(--bg-color); display: none;">
-                                    <!-- Builder content will be rendered here -->
+                                <div class="form-group">
+                                    <label>Файл системного промпта</label>
+                                    <div class="input-group">
+                                        <input type="text" name="system_prompt_file" value="{{ role.system_prompt_file }}">
+                                        <button type="button" class="btn btn-secondary" id="edit-prompt-btn-{{ loop.index0 }}" onclick="editPrompt(this)">
+                                            <i class="fas fa-edit"></i>
+                                        </button>
+                                    </div>
                                 </div>
-                            </div>
-                            <div class="form-group">
-                                <label>Токен Telegram бота</label>
-                                <input type="text" name="telegram_bot_token" value="{{ role.telegram_bot_token }}">
-                            </div>
-                            <div class="form-group full-width">
-                                <label>Описание</label>
-                                <textarea name="description">{{ role.description }}</textarea>
+                                <div class="form-group">
+                                    <label>Тип агента</label>
+                                    <select name="agent_type" onchange="updateCliCommand(this)">
+                                        <option value="gemini_acp" {% if role.agent_type == 'gemini_acp' %}selected{% endif %}>Gemini (ACP)</option>
+                                        <option value="opencode_acp" {% if role.agent_type == 'opencode_acp' %}selected{% endif %}>OpenCode (ACP)</option>
+                                        <option value="qwen_acp" {% if role.agent_type == 'qwen_acp' %}selected{% endif %}>Qwen (ACP)</option>
+                                        <option value="codex_cli" {% if role.agent_type == 'codex_cli' %}selected{% endif %}>Codex CLI</option>
+                                        <option value="claude_cli" {% if role.agent_type == 'claude_cli' %}selected{% endif %}>Claude CLI</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label>CLI команда</label>
+                                    <div class="input-group">
+                                        <input type="text" name="cli_command" value="{{ role.cli_command }}">
+                                        <button type="button" class="btn btn-secondary" onclick="toggleBuilder(this)" title="Конструктор опций">
+                                            <i class="fas fa-sliders-h"></i>
+                                        </button>
+                                        <button type="button" class="btn btn-danger" onclick="resetToDefault(this)" title="Сбросить к стандартным">
+                                            <i class="fas fa-undo"></i>
+                                        </button>
+                                    </div>
+                                    <div class="cli-builder-container" style="margin-top: 10px; padding: 15px; border: 1px solid var(--border-color); border-radius: 4px; background-color: var(--bg-color); display: none;">
+                                        <!-- Builder content will be rendered here -->
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label>Токен Telegram бота</label>
+                                    <input type="text" name="telegram_bot_token" value="{{ role.telegram_bot_token }}">
+                                </div>
+                                <div class="form-group full-width">
+                                    <label>Описание</label>
+                                    <textarea name="description">{{ role.description }}</textarea>
+                                </div>
                             </div>
                         </div>
                     </div>
+                    {% endfor %}
                 </div>
-                {% endfor %}
-            </div>
-            <div class="actions">
-                <button type="button" class="btn btn-primary" onclick="addRole()"><i class="fas fa-plus"></i> Добавить роль</button>
-                <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Сохранить и перезагрузить</button>
-            </div>
-        </form>
+                <div class="actions">
+                    <button type="button" class="btn btn-primary" onclick="addRole()"><i class="fas fa-plus"></i> Добавить роль</button>
+                    <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Сохранить и перезагрузить</button>
+                </div>
+            </form>
+        </div>
     </div>
 
     <!-- Prompt Editor Modal -->
@@ -247,7 +252,9 @@
             </div>
         </div>
     </div>
+{% endblock %}
 
+{% block scripts %}
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
     <script>
         const rolesContainer = document.getElementById('roles-container');
@@ -619,7 +626,7 @@
 
         function toggleDarkMode() {
             document.body.classList.toggle('dark-mode');
-            const icon = document.querySelector('.dark-mode-toggle i');
+            const icon = document.querySelector('.settings-dark-mode i');
             if (document.body.classList.contains('dark-mode')) {
                 icon.classList.remove('fa-moon');
                 icon.classList.add('fa-sun');
@@ -693,9 +700,8 @@
         }
 
         document.body.classList.add('dark-mode');
-        document.querySelector('.dark-mode-toggle i').classList.remove('fa-moon');
-        document.querySelector('.dark-mode-toggle i').classList.add('fa-sun');
+        document.querySelector('.settings-dark-mode i').classList.remove('fa-moon');
+        document.querySelector('.settings-dark-mode i').classList.add('fa-sun');
 
     </script>
-</body>
-</html>
+{% endblock %}

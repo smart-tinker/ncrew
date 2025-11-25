@@ -1,0 +1,9 @@
+roles:
+  - role_name: "test_role"
+    display_name: "Test Role"
+    telegram_bot_name: "Test_Bot"
+    agent_type: "opencode_acp"
+    cli_command: "opencode acp"
+    description: "A test role"
+    is_moderator: true
+    system_prompt_file: "test_prompt.md"
