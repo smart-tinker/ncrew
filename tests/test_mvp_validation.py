@@ -54,8 +54,8 @@ class TestMVPValidation:
         from app.core.engine import NeuroCrewLab
 
         # Interface imports
-        from app.interfaces.telegram_bot import TelegramBot
-        from app.interfaces.web_server import app as web_app
+        from app.interfaces.telegram.bot import TelegramBot
+        from app.interfaces.web.server import app as web_app
 
         # Utility imports
         from app.utils.logger import get_logger, setup_logger
@@ -82,12 +82,11 @@ class TestMVPValidation:
         """Validate required files exist."""
         required_files = [
             "app/application.py",
-            "app/config.py",
+            "app/config/__init__.py",
             "app/core/engine.py",
-            "app/interfaces/telegram_bot.py",
-            "app/interfaces/web_server.py",
-            "main.py",
-            "main_mvp.py"
+            "app/interfaces/telegram/bot.py",
+            "app/interfaces/web/server.py",
+            "main.py"
         ]
 
         for file_path in required_files:

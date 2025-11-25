@@ -26,7 +26,7 @@ async def test_start_command_integration():
     # Mock the config loading to avoid dependency on actual .env
     with patch("app.config.Config.load_roles") as mock_load_roles:
         with patch("app.config.Config._load_telegram_bot_tokens") as mock_load_tokens:
-            with patch("app.interfaces.telegram_bot.Application.builder") as mock_app_builder:
+            with patch("app.interfaces.telegram.bot.Application.builder") as mock_app_builder:
                 # Setup mocks
                 mock_load_roles.return_value = True
                 mock_load_tokens.return_value = None
@@ -43,7 +43,7 @@ async def test_start_command_integration():
                 mock_app_builder.return_value.build.return_value = mock_app
 
                 # Import after patching
-                from app.interfaces.telegram_bot import TelegramBot
+                from app.interfaces.telegram.bot import TelegramBot
 
                 # Create bot
                 bot = TelegramBot()

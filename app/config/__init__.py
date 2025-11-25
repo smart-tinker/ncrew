@@ -12,7 +12,7 @@ from dataclasses import dataclass, field, fields
 
 from app.connectors import get_connector_spec
 from app.utils.logger import get_logger
-from app.config_manager import multi_project_manager
+from .manager import multi_project_manager
 
 
 def _initialize_project_context() -> Dict[str, Any]:

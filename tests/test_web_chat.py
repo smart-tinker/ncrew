@@ -4,7 +4,7 @@ import pytest
 import json
 from unittest.mock import patch, AsyncMock, MagicMock, mock_open
 from datetime import datetime
-from app.interfaces.web_server import app
+from app.interfaces.web.server import app
 
 
 @pytest.fixture
