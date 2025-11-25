@@ -137,10 +137,32 @@ def save_roles(roles):
     project.save_config(config_data)
 
 
+@app.context_processor
+def inject_projects():
+    """Inject project list and current project into all templates."""
+    return {
+        "projects": multi_project_manager.list_projects(),
+        "current_project": multi_project_manager.get_current_project()
+    }
+
+
 @app.route("/")
 @requires_auth
 def chat_page():
     """Render the web chat page."""
+    # Handle project switching
+    project_name = request.args.get("project")
+    if project_name:
+        current = multi_project_manager.get_current_project()
+        if project_name != current and multi_project_manager.project_exists(project_name):
+            try:
+                multi_project_manager.load_project_config(project_name)
+                # Redirect to remove query param after switching
+                return redirect(url_for("chat_page"))
+            except Exception as e:
+                app.logger.error(f"Failed to switch project: {e}")
+                # Fallback to current project
+    
     return render_template("chat.html")
 
 
