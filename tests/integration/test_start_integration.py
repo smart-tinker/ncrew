@@ -27,26 +27,25 @@ async def test_start_command_integration():
     with patch("app.config.Config.load_roles") as mock_load_roles:
         with patch("app.config.Config._load_telegram_bot_tokens") as mock_load_tokens:
             with patch("app.interfaces.telegram.bot.Application.builder") as mock_app_builder:
-                # Setup mocks
-                mock_load_roles.return_value = True
-                mock_load_tokens.return_value = None
+                # Patch Config class attributes directly since they are used directly
+                with patch("app.config.Config.MAIN_BOT_TOKEN", "test_main_bot_token"), \
+                     patch("app.config.Config.TARGET_CHAT_ID", 12345), \
+                     patch("app.config.Config.LOG_LEVEL", "INFO"):
+                    
+                    # Setup mocks
+                    mock_load_roles.return_value = True
+                    mock_load_tokens.return_value = None
+                    
+                    # mock_config removed as it was unused and misleading
 
-                mock_config = MagicMock()
-                mock_config.MAIN_BOT_TOKEN = "test_main_bot_token"
-                mock_config.TARGET_CHAT_ID = 12345
-                mock_config.LOG_LEVEL = "INFO"
-                mock_config.is_role_based_enabled.return_value = True
-                mock_config.get_available_roles.return_value = []
-                mock_config.TELEGRAM_BOT_TOKENS = {}
+                    mock_app = MagicMock()
+                    mock_app_builder.return_value.build.return_value = mock_app
 
-                mock_app = MagicMock()
-                mock_app_builder.return_value.build.return_value = mock_app
+                    # Import after patching
+                    from app.interfaces.telegram.bot import TelegramBot
 
-                # Import after patching
-                from app.interfaces.telegram.bot import TelegramBot
-
-                # Create bot
-                bot = TelegramBot()
+                    # Create bot
+                    bot = TelegramBot()
 
                 # Mock the ncrew initialization to avoid external dependencies
                 bot.ncrew = MagicMock()

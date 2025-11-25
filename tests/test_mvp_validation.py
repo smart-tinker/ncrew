@@ -30,7 +30,8 @@ class TestMVPValidation:
         app = get_application()
 
         # 1. Initialization must work
-        assert await app.initialize(), "Application initialization failed"
+        with patch("app.core.agent_coordinator.AgentCoordinator._validate_cli_command", return_value=True):
+            assert await app.initialize(), "Application initialization failed"
 
         # 2. Status reporting must work
         status = app.get_status()
@@ -113,14 +114,16 @@ class TestMVPValidation:
 
         # Test headless mode
         with patch('app.application.Config.MAIN_BOT_TOKEN', ''), \
-             patch('app.application.Config.TARGET_CHAT_ID', '0'):
+             patch('app.application.Config.TARGET_CHAT_ID', '0'), \
+             patch("app.core.agent_coordinator.AgentCoordinator._validate_cli_command", return_value=True):
             await app.initialize()
             assert app.operation_mode.value == "headless", "Headless mode detection failed"
 
         # Test Telegram mode
         app2 = NeuroCrewApplication()
         with patch('app.application.Config.MAIN_BOT_TOKEN', 'test_token'), \
-             patch('app.application.Config.TARGET_CHAT_ID', '123456789'):
+             patch('app.application.Config.TARGET_CHAT_ID', '123456789'), \
+             patch("app.core.agent_coordinator.AgentCoordinator._validate_cli_command", return_value=True):
             await app2.initialize()
             assert app2.operation_mode.value == "multi", "Telegram mode detection failed"
 

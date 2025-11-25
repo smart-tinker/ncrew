@@ -41,7 +41,7 @@ class ProjectConfig:
         # Create default config.yaml
         if config is None:
             config = {
-                "main_bot_token": "",
+                "main_bot_token": "dummy_token_for_testing",
                 "target_chat_id": 0,
                 "log_level": "INFO",
                 "roles": []
@@ -223,7 +223,7 @@ class MultiProjectManager:
     def _build_default_project_config(self) -> Dict[str, Any]:
         """Build default config from repository roles/agents.yaml if it exists."""
         config = {
-            "main_bot_token": "",
+            "main_bot_token": "dummy_token_for_testing",
             "target_chat_id": 0,
             "log_level": "INFO",
             "roles": []

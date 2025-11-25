@@ -27,34 +27,38 @@ def ncrew_lab(mock_storage):
     with patch("app.core.memory_manager.MemoryManager.start", new_callable=AsyncMock), \
          patch("app.core.port_manager.PortManager.start", new_callable=AsyncMock), \
          patch("app.core.session_manager.SessionManager.initialize", new_callable=AsyncMock):
-        # Patch Config where it is used (ncrew module)
-        with patch("app.core.engine.Config") as mock_config:
-            mock_config.is_role_based_enabled.return_value = True
-            mock_config.SYSTEM_REMINDER_INTERVAL = 5
-            mock_config.get_role_sequence.return_value = [
-                RoleConfig(
-                    role_name="dev",
-                    display_name="Developer",
-                    telegram_bot_name="dev_bot",
-                    prompt_file="",
-                    agent_type="mock_agent",
-                    cli_command="echo",
-                    system_prompt="You are a developer",
-                ),
-                RoleConfig(
-                    role_name="reviewer",
-                    display_name="Reviewer",
-                    telegram_bot_name="reviewer_bot",
-                    prompt_file="",
-                    agent_type="mock_agent",
-                    cli_command="echo",
-                    system_prompt="You are a reviewer",
-                ),
-            ]
-            mock_config.TELEGRAM_BOT_TOKENS = {
-                "dev_bot": "token1",
-                "reviewer_bot": "token2",
-            }
+        # Patch Config where it is used (ncrew module AND agent_coordinator module)
+        with patch("app.core.engine.Config") as mock_config, \
+             patch("app.core.agent_coordinator.Config") as mock_coord_config:
+            
+            # Setup both mocks to be safe
+            for config_mock in [mock_config, mock_coord_config]:
+                config_mock.is_role_based_enabled.return_value = True
+                config_mock.SYSTEM_REMINDER_INTERVAL = 5
+                config_mock.get_role_sequence.return_value = [
+                    RoleConfig(
+                        role_name="dev",
+                        display_name="Developer",
+                        telegram_bot_name="dev_bot",
+                        prompt_file="",
+                        agent_type="mock_agent",
+                        cli_command="echo",
+                        system_prompt="You are a developer",
+                    ),
+                    RoleConfig(
+                        role_name="reviewer",
+                        display_name="Reviewer",
+                        telegram_bot_name="reviewer_bot",
+                        prompt_file="",
+                        agent_type="mock_agent",
+                        cli_command="echo",
+                        system_prompt="You are a reviewer",
+                    ),
+                ]
+                config_mock.TELEGRAM_BOT_TOKENS = {
+                    "dev_bot": "token1",
+                    "reviewer_bot": "token2",
+                }
 
             # Also patch get_connector_spec in ncrew to avoid validation errors
             with patch("app.core.agent_coordinator.get_connector_spec") as mock_spec:
