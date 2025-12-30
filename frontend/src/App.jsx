@@ -1,32 +1,66 @@
 import React, { useState, useEffect } from 'react';
 import { Routes, Route, Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import { fetchModels, refreshModels } from './services/models';
 import ProjectCard from './components/ProjectCard';
 import ProjectView from './components/ProjectView';
+import ModelSelector from './components/ModelSelector';
 import './index.css';
 
 function App() {
+  const [models, setModels] = useState([]);
+
+  useEffect(() => {
+    loadModels();
+  }, []);
+
+  const loadModels = async () => {
+    try {
+      const data = await fetchModels();
+      setModels(data.models || []);
+    } catch (err) {
+      console.error('Error loading models:', err);
+    }
+  };
+
+  const handleRefreshModels = async () => {
+    try {
+      const data = await refreshModels();
+      setModels(data.models || []);
+      alert('Models refreshed successfully');
+    } catch (err) {
+      console.error('Error refreshing models:', err);
+      alert('Failed to refresh models');
+    }
+  };
+
   return (
     <div className="container">
       <header className="header">
-        <h1>NCrew - Agentic Harness</h1>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h1>NCrew - Agentic Harness</h1>
+          <button className="button" onClick={handleRefreshModels}>
+            Refresh Models
+          </button>
+        </div>
       </header>
 
       <Routes>
-        <Route path="/" element={<Home />} />
-        <Route path="/project/:projectId" element={<ProjectView />} />
+        <Route path="/" element={<Home models={models} />} />
+        <Route path="/project/:projectId" element={<ProjectView models={models} />} />
       </Routes>
     </div>
   );
 }
 
-function Home() {
+function Home({ models }) {
   const [projects, setProjects] = useState([]);
   const [showAddForm, setShowAddForm] = useState(false);
   const [newProject, setNewProject] = useState({
     name: '',
     path: '',
-    worktreePrefix: 'task-'
+    worktreePrefix: 'task-',
+    defaultModel: null
   });
 
   useEffect(() => {
@@ -49,11 +83,30 @@ function Home() {
     try {
       await axios.post('/api/projects', newProject);
       setShowAddForm(false);
-      setNewProject({ name: '', path: '', worktreePrefix: 'task-' });
+      setNewProject({ name: '', path: '', worktreePrefix: 'task-', defaultModel: null });
       fetchProjects();
     } catch (err) {
       console.error('Error adding project:', err);
       alert(err.response?.data?.error || 'Failed to add project');
+    }
+  };
+
+  const handleModelSelect = (modelFullName) => {
+    if (!modelFullName) {
+      setNewProject({ ...newProject, defaultModel: null });
+      return;
+    }
+
+    const model = models.find(m => m.fullName === modelFullName);
+    if (model) {
+      setNewProject({
+        ...newProject,
+        defaultModel: {
+          agenticHarness: 'opencode',
+          modelProvider: model.provider,
+          modelName: model.name
+        }
+      });
     }
   };
 
@@ -95,14 +148,20 @@ function Home() {
               value={newProject.worktreePrefix}
               onChange={(e) => setNewProject({ ...newProject, worktreePrefix: e.target.value })}
             />
-            <div style={{ display: 'flex', gap: '10px' }}>
+            <label className="label">Default Model:</label>
+            <ModelSelector
+              models={models}
+              selectedModel={newProject.defaultModel?.fullName || ''}
+              onSelect={handleModelSelect}
+            />
+            <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
               <button type="submit" className="button primary">Add Project</button>
               <button
                 type="button"
                 className="button"
                 onClick={() => {
                   setShowAddForm(false);
-                  setNewProject({ name: '', path: '', worktreePrefix: 'task-' });
+                  setNewProject({ name: '', path: '', worktreePrefix: 'task-', defaultModel: null });
                 }}
               >
                 Cancel

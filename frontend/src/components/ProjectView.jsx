@@ -1,12 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import axios from 'axios';
+import ModelSelector from './ModelSelector';
+import RunTaskModal from './RunTaskModal';
 
-export default function ProjectView() {
+export default function ProjectView({ models }) {
   const { projectId } = useParams();
   const [tasks, setTasks] = useState([]);
   const [project, setProject] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [runTask, setRunTask] = useState(null);
 
   useEffect(() => {
     fetchProject();
@@ -37,13 +40,37 @@ export default function ProjectView() {
     }
   };
 
-  const handleRunTask = async (taskId) => {
+  const handleRunClick = (task) => {
+    setRunTask(task);
+  };
+
+  const handleRunConfirm = async (taskId, model) => {
     try {
-      await axios.post(`/api/tasks/${taskId}/run`, { projectId });
+      await axios.post(`/api/tasks/${taskId}/run`, { projectId, model });
+      setRunTask(null);
       fetchTasks();
     } catch (err) {
       console.error('Error running task:', err);
       alert(err.response?.data?.error || 'Failed to start task');
+    }
+  };
+
+  const handleModelChange = async (taskId, modelFullName) => {
+    if (!modelFullName) return;
+
+    const [modelProvider, modelName] = modelFullName.split('/');
+    const model = {
+      agenticHarness: 'opencode',
+      modelProvider,
+      modelName
+    };
+
+    try {
+      await axios.put(`/api/tasks/${taskId}/model`, { projectId, model });
+      fetchTasks();
+    } catch (err) {
+      console.error('Error updating task model:', err);
+      alert('Failed to update task model');
     }
   };
 
@@ -67,6 +94,11 @@ export default function ProjectView() {
         <p style={{ color: '#999', fontSize: '12px', marginTop: '8px' }}>
           Worktree prefix: {project.worktreePrefix}
         </p>
+        {project.defaultModel && (
+          <p style={{ color: '#666', fontSize: '12px', marginTop: '8px' }}>
+            Default model: {project.defaultModel.modelProvider}/{project.defaultModel.modelName}
+          </p>
+        )}
       </div>
 
       <h3>Tasks ({tasks.length})</h3>
@@ -82,21 +114,33 @@ export default function ProjectView() {
           <TaskCard
             key={task.id}
             task={task}
-            onRun={handleRunTask}
+            models={models}
+            onRunClick={handleRunClick}
+            onModelChange={handleModelChange}
           />
         ))
+      )}
+
+      {runTask && (
+        <RunTaskModal
+          task={runTask}
+          model={runTask.model}
+          models={models}
+          onRun={handleRunConfirm}
+          onCancel={() => setRunTask(null)}
+        />
       )}
     </div>
   );
 }
 
-function TaskCard({ task, onRun }) {
+function TaskCard({ task, models, onRunClick, onModelChange }) {
   const statusClass = task.status.toLowerCase();
 
   return (
     <div className={`card ${statusClass === 'failed' ? 'error' : ''}`}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
+        <div style={{ flex: 1 }}>
           <h4>{task.title}</h4>
           <div style={{ marginTop: '8px', display: 'flex', gap: '10px', alignItems: 'center' }}>
             <span className={`status-badge ${statusClass}`}>{task.status}</span>
@@ -104,11 +148,27 @@ function TaskCard({ task, onRun }) {
               Priority: {task.priority}
             </span>
           </div>
+          {task.model && (
+            <div style={{ marginTop: '10px' }}>
+              <label className="label" style={{ fontSize: '12px' }}>Model:</label>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '5px' }}>
+                <ModelSelector
+                  models={models}
+                  selectedModel={task.model?.fullName || ''}
+                  onSelect={(modelFullName) => onModelChange(task.id, modelFullName)}
+                />
+                <span style={{ color: '#999', fontSize: '12px' }}>
+                  {task.model?.fullName}
+                </span>
+              </div>
+            </div>
+          )}
         </div>
         <button
           className={`button ${task.status === 'Running' ? 'success' : 'primary'}`}
-          onClick={() => onRun(task.id)}
+          onClick={() => onRunClick(task)}
           disabled={task.status === 'Running'}
+          style={{ marginLeft: '20px' }}
         >
           {task.status === 'Running' ? 'Running...' : 'Run'}
         </button>
