@@ -21,6 +21,7 @@ const SETTINGS_DIR = getProjectsDir();
 const MODELS_CACHE_FILE = getModelsCacheFile();
 const CACHE_TTL = 24 * 60 * 60 * 1000;
 const RUNNING_TASKS = new Map();
+const STAGES = ['Specification', 'Plan', 'Implementation', 'Verification'];
 
 app.use(cors());
 app.use(express.json());
@@ -419,6 +420,50 @@ app.post('/api/tasks/:taskId/run', async (req, res) => {
   }
 });
 
+app.post('/api/tasks/:id/next-stage', async (req, res) => {
+  try {
+    const { projectId } = req.body;
+    const configPath = path.join(SETTINGS_DIR, `${projectId}.json`);
+
+    if (!await fs.pathExists(configPath)) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+
+    const config = await fs.readJson(configPath);
+    const tasksPath = path.join(config.path, '.memory_bank/tasks');
+    const taskFile = path.join(tasksPath, `${req.params.id}.md`);
+
+    if (!await fs.pathExists(taskFile)) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+
+    const content = await fs.readFile(taskFile, 'utf-8');
+    const frontmatter = parseFrontmatter(content);
+
+    const currentIndex = STAGES.indexOf(frontmatter.stage);
+    if (currentIndex === -1 || currentIndex === STAGES.length - 1) {
+      return res.status(400).json({ error: 'Already at last stage' });
+    }
+
+    const nextStage = STAGES[currentIndex + 1];
+    const updatedContent = updateFrontmatter(content, {
+      stage: nextStage,
+      status: 'New'
+    });
+
+    await fs.writeFile(taskFile, updatedContent, 'utf-8');
+
+    res.json({
+      taskId: req.params.id,
+      stage: nextStage,
+      status: 'New'
+    });
+  } catch (err) {
+    console.error('Error moving task to next stage:', err);
+    res.status(500).json({ error: 'Failed to move task to next stage' });
+  }
+});
+
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '../frontend/dist/index.html'));
 });
@@ -439,7 +484,7 @@ app.get('*', (req, res) => {
 function parseFrontmatter(content) {
   const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---/);
   if (!frontmatterMatch) {
-    return { status: 'New' };
+    return { stage: 'Specification', status: 'New' };
   }
 
   const frontmatter = frontmatterMatch[1];
@@ -452,6 +497,10 @@ function parseFrontmatter(content) {
       const value = valueParts.join(':').trim();
       result[key.trim()] = value.replace(/^"|"$/g, '');
     }
+  }
+
+  if (!result.stage) {
+    result.stage = 'Specification';
   }
 
   return result;

@@ -1,11 +1,13 @@
 ---
 title: Workflow (Stages)
-stage: Specification
-status: New
+stage: Verification
+status: Done
 priority: High
 agenticHarness: opencode
 modelProvider: opencode
 modelName: claude-sonnet-4-5
+specification: ../specs/20251230-04-workflow-stages.md
+plan: ../plans/20251230-04-workflow-stages.md
 ---
 
 # Description

@@ -74,6 +74,21 @@ export default function ProjectView({ models }) {
     }
   };
 
+  const handleNextStage = async (taskId) => {
+    try {
+      await axios.post(`/api/tasks/${taskId}/next-stage`, { projectId });
+      fetchTasks();
+    } catch (err) {
+      console.error('Error moving task to next stage:', err);
+      alert(err.response?.data?.error || 'Failed to move task to next stage');
+    }
+  };
+    } catch (err) {
+      console.error('Error updating task model:', err);
+      alert('Failed to update task model');
+    }
+  };
+
   if (!project) {
     return <div className="container">Project not found</div>;
   }
@@ -117,6 +132,7 @@ export default function ProjectView({ models }) {
             models={models}
             onRunClick={handleRunClick}
             onModelChange={handleModelChange}
+            onNextStage={handleNextStage}
           />
         ))
       )}
@@ -134,8 +150,14 @@ export default function ProjectView({ models }) {
   );
 }
 
-function TaskCard({ task, models, onRunClick, onModelChange }) {
+function TaskCard({ task, models, onRunClick, onModelChange, onNextStage }) {
   const statusClass = task.status.toLowerCase();
+  const stageColors = {
+    Specification: '#1976d2',
+    Plan: '#7b1fa2',
+    Implementation: '#f57c00',
+    Verification: '#388e3c'
+  };
 
   return (
     <div className={`card ${statusClass === 'failed' ? 'error' : ''}`}>
@@ -143,6 +165,12 @@ function TaskCard({ task, models, onRunClick, onModelChange }) {
         <div style={{ flex: 1 }}>
           <h4>{task.title}</h4>
           <div style={{ marginTop: '8px', display: 'flex', gap: '10px', alignItems: 'center' }}>
+            <span
+              className="stage-badge"
+              style={{ backgroundColor: stageColors[task.stage] || '#999' }}
+            >
+              {task.stage}
+            </span>
             <span className={`status-badge ${statusClass}`}>{task.status}</span>
             <span style={{ color: '#999', fontSize: '12px' }}>
               Priority: {task.priority}
@@ -164,14 +192,20 @@ function TaskCard({ task, models, onRunClick, onModelChange }) {
             </div>
           )}
         </div>
-        <button
-          className={`button ${task.status === 'Running' ? 'success' : 'primary'}`}
-          onClick={() => onRunClick(task)}
-          disabled={task.status === 'Running'}
-          style={{ marginLeft: '20px' }}
-        >
-          {task.status === 'Running' ? 'Running...' : 'Run'}
-        </button>
+        <div style={{ display: 'flex', gap: '10px', marginLeft: '20px' }}>
+          {task.status === 'Done' && task.stage !== 'Verification' && (
+            <button className="button" onClick={() => onNextStage(task.id)}>
+              Next Stage
+            </button>
+          )}
+          <button
+            className={`button ${task.status === 'Running' ? 'success' : 'primary'}`}
+            onClick={() => onRunClick(task)}
+            disabled={task.status === 'Running'}
+          >
+            {task.status === 'Running' ? 'Running...' : 'Run'}
+          </button>
+        </div>
       </div>
     </div>
   );
