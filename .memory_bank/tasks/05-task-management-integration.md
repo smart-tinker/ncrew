@@ -1,12 +1,18 @@
 ---
 title: Task Management Integration
-stage: Specification
-status: New
+stage: Verification
+status: Done
 priority: High
 agenticHarness: opencode
 modelProvider: opencode
 modelName: claude-sonnet-4-5
+specification: ../specs/20251230-06-task-management-integration.md
+plan: ../plans/20251230-06-task-management-integration.md
 ---
+
+# Description
+
+Обновить команду запуска задачи для использования промптов этапа. При запуске подставлять пути к файлам задачи и шаблонов в промпты.
 
 # Description
 

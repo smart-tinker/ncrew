@@ -99,6 +99,31 @@ async function createWorktree(projectPath, taskId, worktreePrefix) {
   }
 }
 
+async function getStagePrompt(stage) {
+  const promptPath = path.join(getNcrewHomeDir(), 'stage_prompts', `${stage.toLowerCase()}.md`);
+
+  try {
+    if (await fs.pathExists(promptPath)) {
+      return await fs.readFile(promptPath, 'utf-8');
+    }
+  } catch (error) {
+    console.error(`Error reading stage prompt for ${stage}:`, error);
+  }
+
+  return 'Please read and execute the task.';
+}
+
+function replaceVariables(prompt, variables) {
+  let result = prompt;
+
+  for (const [key, value] of Object.entries(variables)) {
+    const regex = new RegExp(`\\{${key}\\}`, 'g');
+    result = result.replace(regex, value);
+  }
+
+  return result;
+}
+
 async function getModels(forceRefresh = false) {
   if (!forceRefresh) {
     const cached = await loadCachedModels();
@@ -355,23 +380,34 @@ app.post('/api/tasks/:taskId/run', async (req, res) => {
     }
 
     const { branchName, worktreePath } = await createWorktree(
-      config.path, 
-      req.params.taskId, 
+      config.path,
+      req.params.taskId,
       config.worktreePrefix || 'task-'
     );
 
     const taskRelativePath = `.memory_bank/tasks/${req.params.taskId}.md`;
     const modelFullName = `${model.modelProvider}/${model.modelName}`;
-    const prompt = `прочитай и выполни задачу из файла ${taskRelativePath}`;
+    const taskContent = await fs.readFile(taskFile, 'utf-8');
+    const frontmatter = parseFrontmatter(taskContent);
+
+    const stagePrompt = await getStagePrompt(frontmatter.stage);
+    const variables = {
+      task_file: taskRelativePath
+    };
+
+    if (frontmatter.stage === 'Specification') {
+      variables.spec_template = path.join(getNcrewHomeDir(), 'templates/spec.md');
+    } else if (frontmatter.stage === 'Plan') {
+      variables.plan_template = path.join(getNcrewHomeDir(), 'templates/plan.md');
+    }
+
+    const finalPrompt = replaceVariables(stagePrompt, variables);
 
     const { spawn } = require('child_process');
-    const process = spawn('opencode', ['-m', modelFullName, 'run', prompt], {
+    const process = spawn('opencode', ['-m', modelFullName, 'run', finalPrompt], {
       cwd: worktreePath
     });
 
-    const taskContent = await fs.readFile(taskFile, 'utf-8');
-    const frontmatter = parseFrontmatter(taskContent);
-    const startedAt = new Date().toISOString();
     const updatedContent = updateFrontmatter(taskContent, { status: 'Running', startedAt });
     await fs.writeFile(taskFile, updatedContent, 'utf-8');
 
@@ -381,10 +417,12 @@ app.post('/api/tasks/:taskId/run', async (req, res) => {
     const logFile = path.join(logsDir, `${req.params.taskId}-${frontmatter.stage}-${timestamp}.log`);
     const logStream = fs.createWriteStream(logFile, { flags: 'a' });
 
+    logStream.write(`[NCrew] Stage: ${frontmatter.stage}\n`);
     logStream.write(`[NCrew] Using model: ${modelFullName}\n`);
     logStream.write(`[NCrew] Worktree: ${worktreePath}\n`);
     logStream.write(`[NCrew] Task file: ${taskRelativePath}\n`);
-    logStream.write(`[NCrew] Started at: ${startedAt}\n`);
+    logStream.write(`[NCrew] Started at: ${new Date().toISOString()}\n`);
+    logStream.write(`[NCrew] Prompt:\n${finalPrompt}\n`);
     logStream.write('---\n');
 
     process.stdout.on('data', (data) => {
