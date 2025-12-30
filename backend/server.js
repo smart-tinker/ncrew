@@ -7,10 +7,18 @@ const { promisify } = require('util');
 
 const execAsync = promisify(exec);
 
+const {
+  getProjectsDir,
+  getModelsCacheFile,
+  getTaskLogsDir
+} = require('./utils/paths');
+const { initNcrewStructure } = require('./utils/init');
+const { migrateOldSettings } = require('./utils/migrate');
+
 const app = express();
 const PORT = 3001;
-const SETTINGS_DIR = path.join(__dirname, '../settings/projects');
-const MODELS_CACHE_FILE = path.join(__dirname, '../settings/models-cache.json');
+const SETTINGS_DIR = getProjectsDir();
+const MODELS_CACHE_FILE = getModelsCacheFile();
 const CACHE_TTL = 24 * 60 * 60 * 1000;
 const RUNNING_TASKS = new Map();
 
@@ -362,7 +370,7 @@ app.post('/api/tasks/:taskId/run', async (req, res) => {
     const updatedContent = updateFrontmatter(taskContent, { status: 'Running' });
     await fs.writeFile(taskFile, updatedContent, 'utf-8');
 
-    const logsDir = path.join(__dirname, '../settings/logs');
+    const logsDir = getTaskLogsDir(config.path);
     await fs.ensureDir(logsDir);
     const logFile = path.join(logsDir, `${req.params.taskId}-${Date.now()}.log`);
     const logStream = fs.createWriteStream(logFile, { flags: 'a' });
@@ -415,9 +423,18 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '../frontend/dist/index.html'));
 });
 
-app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
-});
+(async () => {
+  try {
+    await initNcrewStructure();
+    await migrateOldSettings();
+  } catch (error) {
+    console.error('Failed to initialize NCrew structure:', error);
+  }
+  
+  app.listen(PORT, () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+  });
+})();
 
 function parseFrontmatter(content) {
   const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---/);
