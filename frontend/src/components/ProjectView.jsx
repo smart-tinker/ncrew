@@ -5,6 +5,7 @@ import ModelSelector from './ModelSelector';
 import RunTaskModal from './RunTaskModal';
 import TaskTimer from './TaskTimer';
 import TaskDetailModal from './TaskDetailModal';
+import ProjectEditModal from './ProjectEditModal';
 
 export default function ProjectView({ models }) {
   const { projectId } = useParams();
@@ -13,6 +14,7 @@ export default function ProjectView({ models }) {
   const [loading, setLoading] = useState(true);
   const [runTask, setRunTask] = useState(null);
   const [detailTask, setDetailTask] = useState(null);
+  const [editProject, setEditProject] = useState(null);
 
   useEffect(() => {
     fetchProject();
@@ -98,8 +100,23 @@ export default function ProjectView({ models }) {
     }
   };
 
-   const handleCloseDetail = () => {
+    const handleCloseDetail = () => {
     setDetailTask(null);
+  };
+
+  const handleEditClick = () => {
+    setEditProject(project);
+  };
+
+  const handleEditSave = async (updatedConfig) => {
+    try {
+      await axios.put(`/api/projects/${project.id}`, updatedConfig);
+      fetchProject();
+      setEditProject(null);
+    } catch (err) {
+      console.error('Error updating project:', err);
+      alert(err.response?.data?.error || 'Failed to update project');
+    }
   };
 
   if (!project) {
@@ -108,10 +125,13 @@ export default function ProjectView({ models }) {
 
   return (
     <div>
-      <div style={{ marginBottom: '20px' }}>
+      <div style={{ marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Link to="/" style={{ textDecoration: 'none', color: '#1976d2' }}>
           ← Back to Projects
         </Link>
+        <button className="button" onClick={handleEditClick}>
+          Edit
+        </button>
       </div>
 
       <div className="card">
@@ -161,7 +181,7 @@ export default function ProjectView({ models }) {
         />
       )}
 
-      {detailTask && (
+       {detailTask && (
         <TaskDetailModal
           task={detailTask}
           onClose={handleCloseDetail}
@@ -169,6 +189,15 @@ export default function ProjectView({ models }) {
           onNextStage={handleNextStage}
           models={models}
           onModelChange={handleModelChange}
+        />
+      )}
+
+      {editProject && (
+        <ProjectEditModal
+          project={editProject}
+          models={models}
+          onSave={handleEditSave}
+          onCancel={() => setEditProject(null)}
         />
       )}
     </div>

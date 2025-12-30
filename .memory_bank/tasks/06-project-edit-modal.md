@@ -1,12 +1,18 @@
 ---
 title: Project Edit Modal
-stage: Specification
-status: New
+stage: Verification
+status: Done
 priority: Medium
 agenticHarness: opencode
 modelProvider: opencode
 modelName: claude-sonnet-4-5
+specification: ../specs/20251230-07-project-edit-modal.md
+plan: ../plans/20251230-07-project-edit-modal.md
 ---
+
+# Description
+
+Добавить возможность редактирования настроек уже добавленного проекта через модальное окно.
 
 # Description
 
