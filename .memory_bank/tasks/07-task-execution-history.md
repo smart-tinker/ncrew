@@ -1,11 +1,13 @@
 ---
 title: Task Execution History
-stage: Specification
-status: New
-priority: Medium
+stage: Implementation
+status: In Progress
+priority: High
 agenticHarness: opencode
 modelProvider: opencode
 modelName: claude-sonnet-4-5
+specification: ../specs/20251230-08-task-execution-history.md
+plan: ../plans/20251230-08-task-execution-history.md
 ---
 
 # Description

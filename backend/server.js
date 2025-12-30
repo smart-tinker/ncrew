@@ -390,8 +390,8 @@ app.post('/api/tasks/:taskId/run', async (req, res) => {
     const taskContent = await fs.readFile(taskFile, 'utf-8');
     const frontmatter = parseFrontmatter(taskContent);
 
-    const stagePrompt = await getStagePrompt(frontmatter.stage);
-    const variables = {
+     const stagePrompt = await getStagePrompt(frontmatter.stage);
+     const variables = {
       task_file: taskRelativePath
     };
 
@@ -408,7 +408,29 @@ app.post('/api/tasks/:taskId/run', async (req, res) => {
       cwd: worktreePath
     });
 
-    const updatedContent = updateFrontmatter(taskContent, { status: 'Running', startedAt });
+    const startedAt = new Date().toISOString();
+
+    const execution = {
+      stage: frontmatter.stage,
+      status: 'In Progress',
+      startedAt,
+      completedAt: null,
+      duration: null,
+      model: {
+        agenticHarness: model.agenticHarness,
+        modelProvider: model.modelProvider,
+        modelName: model.modelName
+      }
+    };
+
+    const executions = frontmatter.executions || [];
+    executions.push(execution);
+
+    const updatedContent = updateFrontmatter(taskContent, {
+      status: 'Running',
+      startedAt,
+      executions
+    });
     await fs.writeFile(taskFile, updatedContent, 'utf-8');
 
     const logsDir = getTaskLogsDir(config.path);
@@ -421,7 +443,7 @@ app.post('/api/tasks/:taskId/run', async (req, res) => {
     logStream.write(`[NCrew] Using model: ${modelFullName}\n`);
     logStream.write(`[NCrew] Worktree: ${worktreePath}\n`);
     logStream.write(`[NCrew] Task file: ${taskRelativePath}\n`);
-    logStream.write(`[NCrew] Started at: ${new Date().toISOString()}\n`);
+    logStream.write(`[NCrew] Started at: ${startedAt}\n`);
     logStream.write(`[NCrew] Prompt:\n${finalPrompt}\n`);
     logStream.write('---\n');
 
@@ -439,9 +461,28 @@ app.post('/api/tasks/:taskId/run', async (req, res) => {
       logStream.end();
       RUNNING_TASKS.delete(req.params.taskId);
 
+      const completedAt = new Date().toISOString();
+      const duration = new Date(completedAt).getTime() - new Date(startedAt).getTime();
+
       const newStatus = exitCode === 0 ? 'Done' : 'Failed';
       fs.readFile(taskFile, 'utf-8')
         .then(content => {
+          const frontmatter = parseFrontmatter(content);
+
+          if (frontmatter.executions && frontmatter.executions.length > 0) {
+            const lastExecution = frontmatter.executions[frontmatter.executions.length - 1];
+            lastExecution.completedAt = completedAt;
+            lastExecution.duration = duration;
+            lastExecution.status = newStatus;
+
+            const newContent = updateFrontmatter(content, {
+              status: newStatus,
+              executions: frontmatter.executions
+            });
+
+            return fs.writeFile(taskFile, newContent, 'utf-8');
+          }
+
           const newContent = updateFrontmatter(content, { status: newStatus });
           return fs.writeFile(taskFile, newContent, 'utf-8');
         })
@@ -567,7 +608,7 @@ app.get('*', (req, res) => {
 function parseFrontmatter(content) {
   const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---/);
   if (!frontmatterMatch) {
-    return { stage: 'Specification', status: 'New' };
+    return { stage: 'Specification', status: 'New', executions: [] };
   }
 
   const frontmatter = frontmatterMatch[1];
@@ -584,6 +625,10 @@ function parseFrontmatter(content) {
 
   if (!result.stage) {
     result.stage = 'Specification';
+  }
+
+  if (!result.executions) {
+    result.executions = [];
   }
 
   return result;
