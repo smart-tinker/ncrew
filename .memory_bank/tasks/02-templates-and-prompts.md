@@ -1,11 +1,13 @@
 ---
 title: Templates and Stage Prompts
-stage: Specification
-status: New
+stage: Verification
+status: Done
 priority: High
 agenticHarness: opencode
 modelProvider: opencode
 modelName: claude-sonnet-4-5
+specification: ../specs/20251230-03-templates-and-prompts.md
+plan: ../plans/20251230-03-templates-and-prompts.md
 ---
 
 # Description
