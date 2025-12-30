@@ -3,6 +3,8 @@ import { useParams, Link } from 'react-router-dom';
 import axios from 'axios';
 import ModelSelector from './ModelSelector';
 import RunTaskModal from './RunTaskModal';
+import TaskTimer from './TaskTimer';
+import TaskDetailModal from './TaskDetailModal';
 
 export default function ProjectView({ models }) {
   const { projectId } = useParams();
@@ -10,6 +12,7 @@ export default function ProjectView({ models }) {
   const [project, setProject] = useState(null);
   const [loading, setLoading] = useState(true);
   const [runTask, setRunTask] = useState(null);
+  const [detailTask, setDetailTask] = useState(null);
 
   useEffect(() => {
     fetchProject();
@@ -83,10 +86,20 @@ export default function ProjectView({ models }) {
       alert(err.response?.data?.error || 'Failed to move task to next stage');
     }
   };
+
+  const handleStopTask = async (taskId) => {
+    try {
+      await axios.post(`/api/tasks/${taskId}/stop`, { projectId });
+      setDetailTask(null);
+      fetchTasks();
     } catch (err) {
-      console.error('Error updating task model:', err);
-      alert('Failed to update task model');
+      console.error('Error stopping task:', err);
+      alert('Failed to stop task');
     }
+  };
+
+   const handleCloseDetail = () => {
+    setDetailTask(null);
   };
 
   if (!project) {
@@ -133,11 +146,12 @@ export default function ProjectView({ models }) {
             onRunClick={handleRunClick}
             onModelChange={handleModelChange}
             onNextStage={handleNextStage}
+            onClick={() => setDetailTask(task)}
           />
         ))
       )}
 
-      {runTask && (
+       {runTask && (
         <RunTaskModal
           task={runTask}
           model={runTask.model}
@@ -146,11 +160,22 @@ export default function ProjectView({ models }) {
           onCancel={() => setRunTask(null)}
         />
       )}
+
+      {detailTask && (
+        <TaskDetailModal
+          task={detailTask}
+          onClose={handleCloseDetail}
+          onStopTask={handleStopTask}
+          onNextStage={handleNextStage}
+          models={models}
+          onModelChange={handleModelChange}
+        />
+      )}
     </div>
   );
 }
 
-function TaskCard({ task, models, onRunClick, onModelChange, onNextStage }) {
+function TaskCard({ task, models, onRunClick, onModelChange, onNextStage, onClick }) {
   const statusClass = task.status.toLowerCase();
   const stageColors = {
     Specification: '#1976d2',
@@ -160,7 +185,7 @@ function TaskCard({ task, models, onRunClick, onModelChange, onNextStage }) {
   };
 
   return (
-    <div className={`card ${statusClass === 'failed' ? 'error' : ''}`}>
+    <div className={`card ${statusClass === 'failed' ? 'error' : ''}`} onClick={onClick}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ flex: 1 }}>
           <h4>{task.title}</h4>
@@ -175,6 +200,9 @@ function TaskCard({ task, models, onRunClick, onModelChange, onNextStage }) {
             <span style={{ color: '#999', fontSize: '12px' }}>
               Priority: {task.priority}
             </span>
+            {task.status === 'In Progress' && task.startedAt && (
+              <TaskTimer startTime={task.startedAt} />
+            )}
           </div>
           {task.model && (
             <div style={{ marginTop: '10px' }}>
@@ -194,13 +222,13 @@ function TaskCard({ task, models, onRunClick, onModelChange, onNextStage }) {
         </div>
         <div style={{ display: 'flex', gap: '10px', marginLeft: '20px' }}>
           {task.status === 'Done' && task.stage !== 'Verification' && (
-            <button className="button" onClick={() => onNextStage(task.id)}>
+            <button className="button" onClick={(e) => { e.stopPropagation(); onNextStage(task.id); }}>
               Next Stage
             </button>
           )}
           <button
             className={`button ${task.status === 'Running' ? 'success' : 'primary'}`}
-            onClick={() => onRunClick(task)}
+            onClick={(e) => { e.stopPropagation(); onRunClick(task); }}
             disabled={task.status === 'Running'}
           >
             {task.status === 'Running' ? 'Running...' : 'Run'}

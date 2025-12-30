@@ -190,6 +190,8 @@ app.get('/api/projects/:projectId/tasks', async (req, res) => {
             title,
             status,
             priority,
+            stage: frontmatter.stage || 'Specification',
+            startedAt: frontmatter.startedAt || null,
             model: {
               agenticHarness: frontmatter.agenticHarness || defaultModel.agenticHarness,
               modelProvider: frontmatter.modelProvider || defaultModel.modelProvider,
@@ -368,18 +370,21 @@ app.post('/api/tasks/:taskId/run', async (req, res) => {
     });
 
     const taskContent = await fs.readFile(taskFile, 'utf-8');
-    const updatedContent = updateFrontmatter(taskContent, { status: 'Running' });
+    const frontmatter = parseFrontmatter(taskContent);
+    const startedAt = new Date().toISOString();
+    const updatedContent = updateFrontmatter(taskContent, { status: 'Running', startedAt });
     await fs.writeFile(taskFile, updatedContent, 'utf-8');
 
     const logsDir = getTaskLogsDir(config.path);
     await fs.ensureDir(logsDir);
-    const logFile = path.join(logsDir, `${req.params.taskId}-${Date.now()}.log`);
+    const timestamp = Date.now();
+    const logFile = path.join(logsDir, `${req.params.taskId}-${frontmatter.stage}-${timestamp}.log`);
     const logStream = fs.createWriteStream(logFile, { flags: 'a' });
 
     logStream.write(`[NCrew] Using model: ${modelFullName}\n`);
     logStream.write(`[NCrew] Worktree: ${worktreePath}\n`);
     logStream.write(`[NCrew] Task file: ${taskRelativePath}\n`);
-    logStream.write(`[NCrew] Started at: ${new Date().toISOString()}\n`);
+    logStream.write(`[NCrew] Started at: ${startedAt}\n`);
     logStream.write('---\n');
 
     process.stdout.on('data', (data) => {
@@ -412,7 +417,8 @@ app.post('/api/tasks/:taskId/run', async (req, res) => {
       message: 'Task started successfully',
       taskId: req.params.taskId,
       worktreePath,
-      branchName
+      branchName,
+      startedAt
     });
   } catch (err) {
     console.error('Error starting task:', err);
@@ -461,6 +467,45 @@ app.post('/api/tasks/:id/next-stage', async (req, res) => {
   } catch (err) {
     console.error('Error moving task to next stage:', err);
     res.status(500).json({ error: 'Failed to move task to next stage' });
+  }
+});
+
+app.post('/api/tasks/:id/stop', async (req, res) => {
+  try {
+    const { projectId } = req.body;
+    const configPath = path.join(SETTINGS_DIR, `${projectId}.json`);
+
+    if (!await fs.pathExists(configPath)) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+
+    const config = await fs.readJson(configPath);
+    const tasksPath = path.join(config.path, '.memory_bank/tasks');
+    const taskFile = path.join(tasksPath, `${req.params.id}.md`);
+
+    if (!await fs.pathExists(taskFile)) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+
+    const runningTask = RUNNING_TASKS.get(req.params.id);
+    if (!runningTask) {
+      return res.status(404).json({ error: 'Task not running' });
+    }
+
+    const { process } = runningTask;
+    process.kill();
+
+    const content = await fs.readFile(taskFile, 'utf-8');
+    const updatedContent = updateFrontmatter(content, { status: 'Failed' });
+    await fs.writeFile(taskFile, updatedContent, 'utf-8');
+
+    res.json({
+      taskId: req.params.id,
+      status: 'Failed'
+    });
+  } catch (err) {
+    console.error('Error stopping task:', err);
+    res.status(500).json({ error: 'Failed to stop task' });
   }
 });
 
