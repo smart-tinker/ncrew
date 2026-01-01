@@ -1,47 +1,62 @@
-# API Reference NCrew
+# API Reference (NCrew)
 
-Документация по API endpoints NCrew.
+Документация по текущим API endpoints NCrew (MVP).
 
-## Базовый URL
+## Base URL
 
 ```
 http://localhost:3001/api
 ```
 
-## Authentication
+## Auth
 
-В текущей версии MVP аутентификация не реализована.
-
-В будущих версиях будет добавлена JWT-аутентификация.
+В текущей версии аутентификация не реализована.
 
 ## Errors
 
-Коды ответов:
-
-- `200 OK` - Успешный запрос
-- `201 Created` - Ресурс создан
-- `400 Bad Request` - Неверные данные запроса
-- `404 Not Found` - Ресурс не найден
-- `500 Internal Server Error` - Ошибка сервера
-
-Формат ошибки:
+Большинство ошибок возвращаются в виде:
 
 ```json
 {
-  "error": "Error message",
-  "details": {
-    "field": "Additional details"
-  }
+  "error": "Message"
 }
 ```
 
-## Endpoints
+## Models
 
-### Projects
+### Get Models Cache
 
-#### Get All Projects
+```http
+GET /api/models
+```
 
-Получить список всех проектов.
+**Response 200:**
+```json
+{
+  "models": [
+    { "provider": "opencode", "name": "claude-sonnet-4-5", "fullName": "opencode/claude-sonnet-4-5" }
+  ],
+  "cachedAt": "2025-12-30T20:00:00.000Z",
+  "expiresAt": "2025-12-31T20:00:00.000Z"
+}
+```
+
+**Response 503 (если `opencode` недоступен):**
+```json
+{ "error": "opencode not found in PATH or failed to execute" }
+```
+
+### Refresh Models Cache
+
+```http
+POST /api/models/refresh
+```
+
+Ответ такой же, как у `GET /api/models`.
+
+## Projects
+
+### List Projects
 
 ```http
 GET /api/projects
@@ -51,565 +66,315 @@ GET /api/projects
 ```json
 [
   {
-    "id": "proj-123",
-    "name": "My App",
-    "path": "/home/dev/my-app",
-    "model": "claude-3.5-sonnet",
-    "provider": "anthropic",
-    "createdAt": "2025-01-15T10:00:00Z"
+    "id": "ncrew",
+    "name": "NCrew",
+    "path": "/home/dadgo/code/ncrew",
+    "worktreePrefix": "wt-",
+    "defaultModel": {
+      "agenticHarness": "opencode",
+      "modelProvider": "opencode",
+      "modelName": "claude-sonnet-4-5",
+      "fullName": "opencode/claude-sonnet-4-5"
+    },
+    "isAccessible": true,
+    "error": null
   }
 ]
 ```
 
-#### Get Project by ID
-
-Получить информацию о проекте.
-
-```http
-GET /api/projects/:id
-```
-
-**Parameters:**
-- `id` (string, required) - ID проекта
-
-**Response 200:**
-```json
-{
-  "id": "proj-123",
-  "name": "My App",
-  "path": "/home/dev/my-app",
-  "model": "claude-3.5-sonnet",
-  "provider": "anthropic",
-  "createdAt": "2025-01-15T10:00:00Z"
-}
-```
-
-**Response 404:**
-```json
-{
-  "error": "Project not found"
-}
-```
-
-#### Create Project
-
-Создать новый проект.
+### Create Project
 
 ```http
 POST /api/projects
 ```
 
-**Request Body:**
+**Request body:**
 ```json
 {
-  "name": "My App",
-  "path": "/home/dev/my-app",
-  "model": "claude-3.5-sonnet",
-  "provider": "anthropic",
-  "opencodeArgs": ["--agent", "build"]
-}
-```
-
-**Parameters:**
-- `name` (string, required) - Название проекта
-- `path` (string, required) - Абсолютный путь к проекту
-- `model` (string, optional) - Модель AI (default: "claude-3.5-sonnet")
-- `provider` (string, optional) - Провайдер AI (default: "anthropic")
-- `opencodeArgs` (array, optional) - Дополнительные аргументы для opencode
-
-**Response 201:**
-```json
-{
-  "id": "proj-123",
-  "name": "My App",
-  "path": "/home/dev/my-app",
-  "model": "claude-3.5-sonnet",
-  "provider": "anthropic",
-  "createdAt": "2025-01-15T10:00:00Z"
-}
-```
-
-**Response 400:**
-```json
-{
-  "error": "Invalid path",
-  "details": {
-    "path": "Path does not exist"
+  "name": "My Project",
+  "path": "/abs/path/to/repo",
+  "worktreePrefix": "task-",
+  "defaultModel": {
+    "agenticHarness": "opencode",
+    "modelProvider": "opencode",
+    "modelName": "claude-sonnet-4-5"
   }
 }
 ```
 
-#### Update Project
+Примечания:
+- `id` проекта вычисляется из `name` (lowercase + пробелы → `-`).
+- `defaultModel` опционален.
 
-Обновить информацию о проекте.
+**Response 200:**
+```json
+{
+  "id": "my-project",
+  "name": "My Project",
+  "path": "/abs/path/to/repo",
+  "worktreePrefix": "task-",
+  "isAccessible": true,
+  "defaultModel": {
+    "agenticHarness": "opencode",
+    "modelProvider": "opencode",
+    "modelName": "claude-sonnet-4-5",
+    "fullName": "opencode/claude-sonnet-4-5"
+  }
+}
+```
+
+**Response 400 (примеры):**
+```json
+{ "error": "Name and path are required" }
+```
+```json
+{ "error": "Project path not accessible" }
+```
+```json
+{ "error": "Project already exists" }
+```
+```json
+{ "error": "Selected model not available" }
+```
+
+### Update Project
 
 ```http
 PUT /api/projects/:id
 ```
 
-**Parameters:**
-- `id` (string, required) - ID проекта
-
-**Request Body:**
+**Request body (любые поля):**
 ```json
 {
-  "name": "My App Updated",
-  "model": "gpt-4o",
-  "provider": "openai"
+  "name": "Updated Name",
+  "worktreePrefix": "feat-",
+  "defaultModel": null
 }
 ```
 
-**Response 200:**
+Примечания:
+- `defaultModel: null` удаляет дефолтную модель из конфига проекта.
+- При смене `worktreePrefix`, если уже есть worktree со старым префиксом, backend вернёт “предупреждение” и потребует подтверждения.
+
+**Response 200 (обычный):**
 ```json
 {
-  "id": "proj-123",
-  "name": "My App Updated",
-  "path": "/home/dev/my-app",
-  "model": "gpt-4o",
-  "provider": "openai",
-  "createdAt": "2025-01-15T10:00:00Z"
+  "id": "my-project",
+  "name": "Updated Name",
+  "path": "/abs/path/to/repo",
+  "worktreePrefix": "feat-",
+  "defaultModel": null,
+  "isAccessible": true
 }
 ```
 
-#### Delete Project
+**Response 200 (требуется подтверждение смены префикса):**
+```json
+{
+  "warning": "Changing worktree prefix will not affect existing worktrees. Old worktrees will remain.",
+  "requiresConfirmation": true,
+  "project": {
+    "id": "my-project",
+    "name": "Updated Name",
+    "path": "/abs/path/to/repo",
+    "worktreePrefix": "feat-",
+    "defaultModel": null,
+    "isAccessible": true
+  }
+}
+```
 
-Удалить проект.
+Чтобы подтвердить смену префикса — повторите запрос, добавив:
+
+```json
+{
+  "confirmWorktreePrefixChange": true
+}
+```
+
+## Tasks
+
+### List Tasks (by Project)
 
 ```http
-DELETE /api/projects/:id
+GET /api/projects/:projectId/tasks
 ```
 
-**Parameters:**
-- `id` (string, required) - ID проекта
-
-**Response 200:**
-```json
-{
-  "message": "Project deleted successfully"
-}
-```
-
-#### Get Project Tasks
-
-Получить все задачи проекта.
-
-```http
-GET /api/projects/:id/tasks
-```
-
-**Parameters:**
-- `id` (string, required) - ID проекта
-
-**Response 200:**
+**Response 200 (пример одного элемента):**
 ```json
 [
   {
-    "id": "task-456",
-    "projectId": "proj-123",
-    "title": "Add authentication",
+    "id": "01-system-settings",
+    "title": "System Settings (~/.ncrew)",
     "status": "New",
     "priority": "High",
-    "description": "Task description...",
-    "filePath": "/home/dev/my-app/.memory_bank/tasks/auth.md",
-    "logs": [],
-    "exitCode": null,
+    "stage": "Specification",
     "startedAt": null,
-    "completedAt": null
-  }
-]
-```
-
----
-
-### Tasks
-
-#### Get All Tasks
-
-Получить все задачи из всех проектов.
-
-```http
-GET /api/tasks
-```
-
-**Query Parameters:**
-- `status` (string, optional) - Фильтр по статусу (New, In Progress, Done, Failed)
-- `priority` (string, optional) - Фильтр по приоритету (Low, Medium, High)
-- `projectId` (string, optional) - Фильтр по ID проекта
-
-**Пример:**
-```
-GET /api/tasks?status=New&priority=High
-```
-
-**Response 200:**
-```json
-[
-  {
-    "id": "task-456",
-    "projectId": "proj-123",
-    "title": "Add authentication",
-    "status": "New",
-    "priority": "High",
-    "description": "Task description...",
-    "filePath": "/home/dev/my-app/.memory_bank/tasks/auth.md",
-    "logs": [],
-    "exitCode": null,
-    "startedAt": null,
-    "completedAt": null
-  }
-]
-```
-
-#### Get Task by ID
-
-Получить детальную информацию о задаче.
-
-```http
-GET /api/tasks/:id
-```
-
-**Parameters:**
-- `id` (string, required) - ID задачи
-
-**Response 200:**
-```json
-{
-  "id": "task-456",
-  "projectId": "proj-123",
-  "title": "Add authentication",
-  "status": "In Progress",
-  "priority": "High",
-  "description": "Task description...",
-  "filePath": "/home/dev/my-app/.memory_bank/tasks/auth.md",
-  "logs": [
-    "Starting task execution...",
-    "Creating worktree...",
-    "Running opencode..."
-  ],
-  "exitCode": null,
-  "startedAt": "2025-01-15T10:30:00Z",
-  "completedAt": null
-}
-```
-
-**Response 404:**
-```json
-{
-  "error": "Task not found"
-}
-```
-
-#### Run Task
-
-Запустить выполнение задачи.
-
-```http
-POST /api/tasks/run
-```
-
-**Request Body:**
-```json
-{
-  "taskId": "task-456"
-}
-```
-
-или для нескольких задач:
-
-```json
-{
-  "taskIds": ["task-456", "task-789"]
-}
-```
-
-**Parameters:**
-- `taskId` (string, required) - ID одной задачи
-- `taskIds` (array, optional) - Массив ID задач для множественного запуска
-
-**Response 200:**
-```json
-{
-  "message": "Tasks started successfully",
-  "tasks": [
-    {
-      "id": "task-456",
-      "status": "Running",
-      "startedAt": "2025-01-15T10:30:00Z"
+    "model": {
+      "agenticHarness": "opencode",
+      "modelProvider": "opencode",
+      "modelName": "claude-sonnet-4-5",
+      "fullName": "opencode/claude-sonnet-4-5"
     },
+    "history": [],
+    "executions": [],
+    "logs": [
+      { "file": "01-system-settings-specification-1767130000000.log", "stage": "specification", "timestamp": 1767130000000 }
+    ]
+  }
+]
+```
+
+### Update Task Model
+
+```http
+PUT /api/tasks/:taskId/model
+```
+
+**Request body:**
+```json
+{
+  "projectId": "my-project",
+  "model": {
+    "agenticHarness": "opencode",
+    "modelProvider": "opencode",
+    "modelName": "gpt-5.2"
+  }
+}
+```
+
+**Response 200:**
+```json
+{
+  "taskId": "zz-stage-test",
+  "model": {
+    "agenticHarness": "opencode",
+    "modelProvider": "opencode",
+    "modelName": "gpt-5.2",
+    "fullName": "opencode/gpt-5.2"
+  }
+}
+```
+
+### Run Task
+
+```http
+POST /api/tasks/:taskId/run
+```
+
+**Request body:**
+```json
+{
+  "projectId": "my-project",
+  "model": {
+    "agenticHarness": "opencode",
+    "modelProvider": "opencode",
+    "modelName": "claude-sonnet-4-5"
+  }
+}
+```
+
+**Response 200:**
+```json
+{
+  "status": "In Progress",
+  "message": "Task started successfully",
+  "taskId": "01-system-settings",
+  "worktreePath": "/abs/path/to/repo/worktrees/task-01-system-settings",
+  "branchName": "task-01-system-settings",
+  "startedAt": "2025-12-30T22:06:23.200Z"
+}
+```
+
+**Response 400 (если задача уже запущена):**
+```json
+{ "error": "Task already running" }
+```
+
+### Stop Task
+
+```http
+POST /api/tasks/:id/stop
+```
+
+**Request body:**
+```json
+{ "projectId": "my-project" }
+```
+
+**Response 200:**
+```json
+{ "taskId": "01-system-settings", "status": "Failed" }
+```
+
+### Next Stage
+
+```http
+POST /api/tasks/:id/next-stage
+```
+
+**Request body:**
+```json
+{ "projectId": "my-project" }
+```
+
+**Response 200:**
+```json
+{
+  "taskId": "zz-stage-test",
+  "stage": "Implementation",
+  "status": "New"
+}
+```
+
+### Task History
+
+```http
+GET /api/tasks/:id/history?projectId=:projectId
+```
+
+**Response 200:**
+```json
+{
+  "history": [
     {
-      "id": "task-789",
-      "status": "Running",
-      "startedAt": "2025-01-15T10:30:01Z"
+      "id": "run-1767132383200",
+      "stage": "Verification",
+      "status": "Failed",
+      "startedAt": "2025-12-30T22:06:23.200Z",
+      "completedAt": "2025-12-30T22:09:43.557Z",
+      "duration": 200357,
+      "model": {
+        "agenticHarness": "opencode",
+        "modelProvider": "opencode",
+        "modelName": "claude-sonnet-4-5",
+        "fullName": "opencode/claude-sonnet-4-5"
+      },
+      "logFile": "01-system-settings-verification-1767132383200.log"
     }
   ]
 }
 ```
 
-**Response 400:**
-```json
-{
-  "error": "Task is already running"
-}
-```
-
-#### Stop Task
-
-Остановить выполнение задачи.
+### List Task Logs (filenames)
 
 ```http
-POST /api/tasks/stop
-```
-
-**Request Body:**
-```json
-{
-  "taskId": "task-456"
-}
-```
-
-**Parameters:**
-- `taskId` (string, required) - ID задачи
-
-**Response 200:**
-```json
-{
-  "message": "Task stopped successfully",
-  "task": {
-    "id": "task-456",
-    "status": "Failed",
-    "completedAt": "2025-01-15T10:35:00Z"
-  }
-}
-```
-
-#### Get Task Logs
-
-Получить логи выполнения задачи.
-
-```http
-GET /api/tasks/:id/logs
-```
-
-**Parameters:**
-- `id` (string, required) - ID задачи
-
-**Query Parameters:**
-- `limit` (number, optional) - Количество строк лога (default: all)
-- `offset` (number, optional) - Смещение (default: 0)
-
-**Пример:**
-```
-GET /api/tasks/task-456/logs?limit=100&offset=0
+GET /api/projects/:projectId/tasks/:taskId/logs
 ```
 
 **Response 200:**
 ```json
 {
   "logs": [
-    "Starting task execution...",
-    "Creating worktree...",
-    "Running opencode...",
-    "Reading files...",
-    "Writing changes..."
-  ],
-  "total": 100,
-  "offset": 0
-}
-```
-
----
-
-## WebSocket API
-
-### Connection
-
-```javascript
-const ws = new WebSocket('ws://localhost:3001/ws');
-```
-
-### Events
-
-#### tasks.updated
-
-Отправляется при изменении списка задач.
-
-**Payload:**
-```json
-{
-  "type": "tasks.updated",
-  "data": [
-    {
-      "id": "task-456",
-      "projectId": "proj-123",
-      "title": "Add authentication",
-      "status": "Done",
-      "priority": "High"
-    }
+    { "file": "01-system-settings-verification-1767132383200.log", "stage": "verification", "timestamp": 1767132383200 }
   ]
 }
 ```
 
-#### task.started
+### Read Log File
 
-Отправляется при запуске задачи.
-
-**Payload:**
-```json
-{
-  "type": "task.started",
-  "data": {
-    "id": "task-456",
-    "status": "Running",
-    "startedAt": "2025-01-15T10:30:00Z"
-  }
-}
+```http
+GET /api/projects/:projectId/logs/:logFile
 ```
 
-#### task.log
-
-Отправляется при появлении новых логов.
-
-**Payload:**
-```json
-{
-  "type": "task.log",
-  "data": {
-    "taskId": "task-456",
-    "log": "Reading files...",
-    "timestamp": "2025-01-15T10:30:05Z"
-  }
-}
-```
-
-#### task.completed
-
-Отправляется при завершении задачи.
-
-**Payload:**
-```json
-{
-  "type": "task.completed",
-  "data": {
-    "id": "task-456",
-    "status": "Done",
-    "exitCode": 0,
-    "completedAt": "2025-01-15T10:35:00Z"
-  }
-}
-```
-
-#### task.failed
-
-Отправляется при ошибке выполнения задачи.
-
-**Payload:**
-```json
-{
-  "type": "task.failed",
-  "data": {
-    "id": "task-456",
-    "status": "Failed",
-    "exitCode": 1,
-    "completedAt": "2025-01-15T10:35:00Z",
-    "error": "Process timeout"
-  }
-}
-```
-
-### JavaScript Example
-
-```javascript
-const ws = new WebSocket('ws://localhost:3001/ws');
-
-ws.onopen = () => {
-  console.log('WebSocket connected');
-};
-
-ws.onmessage = (event) => {
-  const message = JSON.parse(event.data);
-  
-  switch (message.type) {
-    case 'tasks.updated':
-      console.log('Tasks updated:', message.data);
-      break;
-    case 'task.started':
-      console.log('Task started:', message.data);
-      break;
-    case 'task.log':
-      console.log('Task log:', message.data.log);
-      break;
-    case 'task.completed':
-      console.log('Task completed:', message.data);
-      break;
-    case 'task.failed':
-      console.error('Task failed:', message.data);
-      break;
-  }
-};
-
-ws.onerror = (error) => {
-  console.error('WebSocket error:', error);
-};
-
-ws.onclose = () => {
-  console.log('WebSocket disconnected');
-};
-```
-
-## Rate Limiting
-
-В текущей версии MVP rate limiting не реализован.
-
-В будущих версиях будет добавлено:
-- Лимит запросов в минуту
-- Лимит одновременных задач на пользователя
-
-## Rate Limiting Headers
-
-Когда rate limiting будет реализован, будут доступны заголовки:
-
-```
-X-RateLimit-Limit: 100
-X-RateLimit-Remaining: 95
-X-RateLimit-Reset: 1234567890
-```
-
-## CORS
-
-В настройках разработки CORS разрешен для всех origins (`*`).
-
-Для продакшена настройте whitelist:
-
-```javascript
-const allowedOrigins = [
-  'https://yourdomain.com'
-];
-
-app.use(cors({
-  origin: allowedOrigins
-}));
-```
-
-## Versioning
-
-Текущая версия API: `v1`
-
-Версия указана в URL:
-
-```
-http://localhost:3001/api/v1/projects
-```
-
-## Changelog
-
-### v1.0.0 (2025-01-15)
-
-- Initial API release
-- Projects CRUD operations
-- Tasks CRUD operations
-- Task execution
-- WebSocket real-time updates
-
-## Support
-
-Если у вас есть вопросы по API, создайте issue в репозитории проекта.
+**Response 200:** `text/plain` (контент лога).

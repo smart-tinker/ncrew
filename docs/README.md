@@ -9,6 +9,8 @@
 - [Инструкция по установке](installation.md) - Как установить и настроить систему
 - [Руководство для разработчиков](development.md) - Как вносить вклад в проект
 - [API Reference](api.md) - Описание API endpoints
+- [Playwright MCP](playwright-mcp.md) - Как агенту управлять UI через Playwright
+- [E2E тесты (Playwright)](e2e-tests.md) - Автоматические UI-тесты без AI
 
 ## Быстрый старт
 

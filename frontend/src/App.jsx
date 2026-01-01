@@ -110,6 +110,10 @@ function Home({ models }) {
     }
   };
 
+  const selectedDefaultModel = newProject.defaultModel
+    ? `${newProject.defaultModel.modelProvider}/${newProject.defaultModel.modelName}`
+    : '';
+
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
@@ -151,7 +155,7 @@ function Home({ models }) {
             <label className="label">Default Model:</label>
             <ModelSelector
               models={models}
-              selectedModel={newProject.defaultModel?.fullName || ''}
+              selectedModel={selectedDefaultModel}
               onSelect={handleModelSelect}
             />
             <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>

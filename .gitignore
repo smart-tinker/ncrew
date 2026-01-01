@@ -38,11 +38,22 @@ Thumbs.db
 # Testing
 coverage/
 .nyc_output/
+playwright-report/
+test-results/
+
+# Repomix
+repomix-output.*
 
 # Temporary files
 tmp/
 temp/
 *.tmp
+
+# NCrew runtime artifacts
+worktrees/
+.memory_bank/tasks/*-history.json
+.serena/
+.tmp/
 
 # Settings (keep projects folder structure but ignore content)
 settings/projects/*.json

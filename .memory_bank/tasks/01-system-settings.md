@@ -8,6 +8,7 @@ modelProvider: opencode
 modelName: claude-sonnet-4-5
 specification: ../specs/20251230-02-system-settings.md
 plan: ../plans/20251230-02-system-settings.md
+startedAt: 2025-12-30T22:13:47.804Z
 ---
 
 # Description

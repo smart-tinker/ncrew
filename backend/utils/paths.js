@@ -3,6 +3,8 @@ const path = require('path');
 const fs = require('fs-extra');
 
 function getNcrewHomeDir() {
+  const override = process.env.NCREW_HOME || process.env.NCREW_HOME_DIR;
+  if (override) return path.resolve(override);
   return path.join(os.homedir(), '.ncrew');
 }
 

@@ -8,8 +8,28 @@ MVP для управления задачами и запуска AI-агент
 ncrew/
 ├── backend/          # Express сервер (API)
 ├── frontend/         # React + Vite
-└── settings/         # Настройки проектов (создается автоматически)
-    └── projects/     # Конфиги проектов (JSON)
+└── docs/             # Документация
+```
+
+Системные настройки и шаблоны создаются автоматически в `~/.ncrew/`:
+
+```
+~/.ncrew/
+  settings/
+    projects/          # Конфиги проектов (JSON)
+    models-cache.json  # Кеш моделей opencode
+  templates/           # task.md / spec.md / plan.md
+  stage_prompts/       # prompts для Specification/Plan/Implementation/Verification
+```
+
+Для каждого подключенного проекта NCrew использует:
+
+```
+<project_path>/
+  .memory_bank/
+    tasks/             # MD задачи (frontmatter)
+    logs/              # Логи запусков (по файлам)
+  worktrees/           # Git worktrees для задач
 ```
 
 ## Установка и запуск
@@ -26,9 +46,18 @@ cd ../frontend && npm install
 npm run dev
 ```
 
-Backend запустится на порту 3001, Frontend - на порту 3000.
+Frontend (Vite) поднимется на `http://localhost:3000` (если порт занят — выберет следующий).
+
+Backend по умолчанию использует `http://localhost:3001`. Если порт занят, `npm run dev` автоматически выберет следующий свободный порт и настроит proxy `/api` в Vite.
 
 3. Открыть в браузере: http://localhost:3000
+
+Для “production” (backend раздаёт `frontend/dist`):
+```bash
+npm -C frontend run build
+node backend/server.js
+```
+Открыть: http://localhost:3001
 
 ## Использование
 
@@ -43,6 +72,7 @@ Backend запустится на порту 3001, Frontend - на порту 30
 ```markdown
 ---
 title: Add authentication
+stage: Specification
 status: New
 priority: High
 ---
@@ -50,5 +80,6 @@ priority: High
 Описание задачи...
 ```
 
+Стадии: `Specification`, `Plan`, `Implementation`, `Verification`
 Статусы: `New`, `In Progress`, `Done`, `Failed`
 Приоритеты: `Low`, `Medium`, `High`

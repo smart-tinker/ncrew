@@ -23,6 +23,12 @@ export default function ProjectView({ models }) {
     return () => clearInterval(interval);
   }, [projectId]);
 
+  useEffect(() => {
+    if (!detailTask) return;
+    const updated = tasks.find(t => t.id === detailTask.id);
+    if (updated) setDetailTask(updated);
+  }, [tasks, detailTask]);
+
   const fetchProject = async () => {
     try {
       const res = await axios.get('/api/projects');
@@ -110,7 +116,18 @@ export default function ProjectView({ models }) {
 
   const handleEditSave = async (updatedConfig) => {
     try {
-      await axios.put(`/api/projects/${project.id}`, updatedConfig);
+      const res = await axios.put(`/api/projects/${project.id}`, updatedConfig);
+
+      if (res.data?.requiresConfirmation && res.data?.warning) {
+        const proceed = window.confirm(res.data.warning);
+        if (!proceed) return;
+
+        await axios.put(`/api/projects/${project.id}`, {
+          ...updatedConfig,
+          confirmWorktreePrefixChange: true
+        });
+      }
+
       fetchProject();
       setEditProject(null);
     } catch (err) {
@@ -166,6 +183,7 @@ export default function ProjectView({ models }) {
             onRunClick={handleRunClick}
             onModelChange={handleModelChange}
             onNextStage={handleNextStage}
+            onStopTask={handleStopTask}
             onClick={() => setDetailTask(task)}
           />
         ))
@@ -183,6 +201,7 @@ export default function ProjectView({ models }) {
 
        {detailTask && (
         <TaskDetailModal
+          projectId={projectId}
           task={detailTask}
           onClose={handleCloseDetail}
           onStopTask={handleStopTask}
@@ -204,8 +223,9 @@ export default function ProjectView({ models }) {
   );
 }
 
-function TaskCard({ task, models, onRunClick, onModelChange, onNextStage, onClick }) {
-  const statusClass = task.status.toLowerCase();
+function TaskCard({ task, models, onRunClick, onModelChange, onNextStage, onStopTask, onClick }) {
+  const statusClass = task.status.toLowerCase().replace(/\s+/g, '-');
+  const isRunning = task.status === 'Running' || task.status === 'In Progress';
   const stageColors = {
     Specification: '#1976d2',
     Plan: '#7b1fa2',
@@ -229,7 +249,7 @@ function TaskCard({ task, models, onRunClick, onModelChange, onNextStage, onClic
             <span style={{ color: '#999', fontSize: '12px' }}>
               Priority: {task.priority}
             </span>
-            {task.status === 'In Progress' && task.startedAt && (
+            {isRunning && task.startedAt && (
               <TaskTimer startTime={task.startedAt} />
             )}
           </div>
@@ -255,12 +275,21 @@ function TaskCard({ task, models, onRunClick, onModelChange, onNextStage, onClic
               Next Stage
             </button>
           )}
+          {isRunning && (
+            <button
+              className="button"
+              style={{ backgroundColor: '#e74c3c', color: 'white' }}
+              onClick={(e) => { e.stopPropagation(); onStopTask(task.id); }}
+            >
+              Stop
+            </button>
+          )}
           <button
-            className={`button ${task.status === 'Running' ? 'success' : 'primary'}`}
+            className={`button ${isRunning ? 'success' : 'primary'}`}
             onClick={(e) => { e.stopPropagation(); onRunClick(task); }}
-            disabled={task.status === 'Running'}
+            disabled={isRunning}
           >
-            {task.status === 'Running' ? 'Running...' : 'Run'}
+            {isRunning ? 'Running...' : 'Run'}
           </button>
         </div>
       </div>

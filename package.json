@@ -5,9 +5,12 @@
   "scripts": {
     "backend": "cd backend && node server.js",
     "frontend": "cd frontend && npm run dev",
-    "dev": "concurrently \"npm run backend\" \"npm run frontend\""
+    "dev": "node scripts/dev.js",
+    "dev:legacy": "concurrently \"npm run backend\" \"npm run frontend\"",
+    "test:e2e": "node scripts/e2e.js"
   },
   "devDependencies": {
+    "@playwright/test": "^1.50.0",
     "concurrently": "^8.2.2"
   }
 }

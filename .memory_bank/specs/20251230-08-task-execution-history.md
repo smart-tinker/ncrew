@@ -2,12 +2,12 @@
 
 **Имя:** Task Execution History  
 **Дата:** 2025-12-30  
-**Версия:** 1.0  
+**Версия:** 1.1  
 **Статус:** Done
 
 ## Обзор
 
-Добавить визуализацию истории выполнения задачи по этапам. Позволить просматривать историю запусков на каждом этапе.
+Добавить визуализацию истории запусков задачи по этапам и удобный просмотр логов каждого запуска.
 
 ## User Stories
 
@@ -18,59 +18,59 @@
 
 ### Функциональные требования
 
-#### 1. Хранение истории
+#### 1. Хранение истории (выбранный вариант)
 
-**Вариант A (упрощенный MVP):** Хранить историю во фронтматтере задачи
+История хранится в отдельном файле рядом с задачами:
 
-```yaml
----
-title: Task Name
-stage: Implementation
-status: Done
-priority: High
-executions:
-  - stage: Specification
-    status: Done
-    startedAt: "2025-12-30T10:00:00Z"
-    completedAt: "2025-12-30T10:01:23Z"
-    duration: 83000
-    model: opencode/claude-sonnet-4-5
-  - stage: Plan
-    status: Done
-    startedAt: "2025-12-30T10:02:00Z"
-    completedAt: "2025-12-30T10:03:00Z"
-    duration: 60000
-    model: opencode/claude-sonnet-4-5
+```
+<project>/.memory_bank/tasks/<taskId>-history.json
+```
+
+Пример структуры:
+
+```json
+{
+  "history": [
+    {
+      "id": "run-1767132827804",
+      "stage": "Verification",
+      "status": "Failed",
+      "startedAt": "2025-12-30T22:13:47.804Z",
+      "completedAt": "2025-12-30T22:13:56.982Z",
+      "duration": 9178,
+      "model": {
+        "agenticHarness": "opencode",
+        "modelProvider": "opencode",
+        "modelName": "claude-sonnet-4-5",
+        "fullName": "opencode/claude-sonnet-4-5"
+      },
+      "logFile": "01-system-settings-verification-1767132827804.log"
+    }
+  ]
+}
 ```
 
 #### 2. Визуализация
 
-**Простая MVP:** Показывать только последнюю информацию в TaskDetailModal
-
-```jsx
-<div>
-  <strong>Last Execution:</strong> {task.lastExecution.stage} - {task.lastExecution.status}
-  <strong>Duration:</strong> {formatDuration(task.lastExecution.duration)}
-</div>
-```
+В `TaskDetailModal` показывать timeline запусков (все записи history) и давать выбрать лог-файл конкретного запуска.
 
 #### 3. Backend
 
-- Добавить поле `executions` в parseFrontmatter
-- При запуске задачи добавлять запись в историю
-- При завершении обновлять запись
+- При запуске задачи добавлять запись в `<taskId>-history.json` со статусом `In Progress`
+- При завершении/остановке обновлять соответствующую запись (`status`, `completedAt`, `duration`)
+- В `GET /api/projects/:id/tasks` включать `history`/`executions` и список доступных логов
 
 #### 4. Frontend
 
-- Обновить TaskDetailModal для отображения истории
-- Показывать время выполнения
-- Показывать использованную модель
+- Обновить `TaskDetailModal` для отображения истории и логов по файлам
+- Показывать время выполнения (duration) и использованную модель (model)
+- При выборе запуска подсвечивать его лог и показывать содержимое
 
 ## Приемочные критерии
 
-1. ✅ История выполнения хранится во фронтматтере задачи
-2. ✅ При запуске задачи добавляется запись в историю
-3. ✅ При завершении обновляется запись в истории
-4. ✅ TaskDetailModal показывает историю выполнения
-5. ✅ Отображается время выполнения
-6. ✅ Отображается использованная модель
+1. ✅ История выполнения хранится в `<taskId>-history.json`
+2. ✅ При запуске задачи добавляется запись в историю со статусом `In Progress`
+3. ✅ При завершении/остановке запись обновляется (status/completedAt/duration)
+4. ✅ TaskDetailModal показывает timeline истории
+5. ✅ Для каждого запуска отображаются duration и model
+6. ✅ Можно выбрать запуск и посмотреть его лог

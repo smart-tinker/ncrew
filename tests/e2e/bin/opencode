@@ -1,0 +1,91 @@
+#!/usr/bin/env node
+
+const { setTimeout: delay } = require('timers/promises');
+
+async function readStdinToEof() {
+  if (!process.stdin.isTTY) {
+    process.stdin.resume();
+  }
+  if (process.stdin.readableEnded) return;
+  await new Promise((resolve) => process.stdin.once('end', resolve));
+}
+
+function getFlagValue(args, flag) {
+  const idx = args.indexOf(flag);
+  if (idx === -1) return null;
+  const value = args[idx + 1];
+  return value ?? null;
+}
+
+function extractTaskId(prompt) {
+  if (!prompt) return null;
+  const match = String(prompt).match(/\.memory_bank\/tasks\/([^\s]+?)\.md/);
+  return match ? match[1] : null;
+}
+
+async function main() {
+  const args = process.argv.slice(2);
+
+  if (args.length === 0) {
+    process.stderr.write('fake-opencode: missing command\n');
+    process.exit(2);
+  }
+
+  if (args[0] === 'models') {
+    const defaultModels = [
+      'opencode/glm-4.7-free',
+      'opencode/grok-code',
+      'opencode/claude-sonnet-4-5',
+      'zai-coding-plan/glm-4.7'
+    ];
+
+    const fromEnv = (process.env.FAKE_OPENCODE_MODELS || process.env.E2E_MODEL_FULL_NAME || '')
+      .split(/[\n,]/g)
+      .map(s => s.trim())
+      .filter(Boolean);
+
+    const models = [];
+    const seen = new Set();
+    for (const m of [...fromEnv, ...defaultModels]) {
+      if (!m.includes('/')) continue;
+      if (seen.has(m)) continue;
+      seen.add(m);
+      models.push(m);
+    }
+
+    process.stdout.write(models.join('\n') + '\n');
+    return;
+  }
+
+  const model = getFlagValue(args, '-m') || process.env.E2E_MODEL_FULL_NAME || 'opencode/glm-4.7-free';
+  const runIndex = args.indexOf('run');
+  const prompt = runIndex === -1 ? '' : args.slice(runIndex + 1).join(' ');
+  const taskId = extractTaskId(prompt);
+
+  // This intentionally blocks until stdin is closed (EOF).
+  // It catches regressions where NCrew spawns opencode with an open stdin pipe.
+  await readStdinToEof();
+
+  const defaultSleepMs = Number(process.env.FAKE_OPENCODE_SLEEP_MS || 50);
+  const slowTasks = String(process.env.FAKE_OPENCODE_SLOW_TASKS || '')
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean);
+  const slowSleepMs = Number(process.env.FAKE_OPENCODE_SLOW_MS || 30_000);
+  const sleepMs = taskId && slowTasks.some(token => taskId.includes(token)) ? slowSleepMs : defaultSleepMs;
+
+  process.stdout.write(`[fake-opencode] model=${model}\n`);
+  process.stdout.write(`[fake-opencode] task=${taskId || 'unknown'}\n`);
+  process.stdout.write(`[fake-opencode] prompt=${prompt}\n`);
+
+  if (sleepMs > 0) {
+    await delay(sleepMs);
+  }
+
+  process.stdout.write('[fake-opencode] done\n');
+}
+
+main().catch((err) => {
+  process.stderr.write(`[fake-opencode] error: ${err?.message || String(err)}\n`);
+  process.exit(1);
+});

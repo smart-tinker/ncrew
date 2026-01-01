@@ -5,13 +5,38 @@ const {
   getModelsCacheFile
 } = require('./paths');
 
+function getOldSettingsCandidates() {
+  const cwd = process.cwd();
+
+  return [
+    // Common when starting backend from repo root: `node backend/server.js`
+    path.join(cwd, 'settings'),
+    // Common when starting backend from `backend/`: `node server.js`
+    path.join(cwd, '..', 'settings'),
+    // Fallback relative to this file's location
+    path.join(__dirname, '..', '..', 'settings')
+  ];
+}
+
 async function migrateOldSettings() {
   console.log('Checking for old settings to migrate...');
 
-  const oldSettingsDir = path.join(__dirname, '../settings');
+  const candidates = getOldSettingsCandidates();
+  const oldSettingsDir = (await (async () => {
+    for (const candidate of candidates) {
+      try {
+        if (await fs.pathExists(candidate)) {
+          return candidate;
+        }
+      } catch {
+        // ignore
+      }
+    }
+    return null;
+  })());
   const newSettingsDir = getProjectsDir();
   
-  if (!await fs.pathExists(oldSettingsDir)) {
+  if (!oldSettingsDir) {
     console.log('  No old settings found');
     return;
   }
@@ -35,9 +60,11 @@ async function migrateOldSettings() {
   }
   
   // Backup old settings
-  const backupDir = path.join(oldSettingsDir, 'backup');
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-  const backupPath = path.join(oldSettingsDir, `backup-${timestamp}`);
+  const backupPath = path.join(
+    path.dirname(oldSettingsDir),
+    `${path.basename(oldSettingsDir)}-backup-${timestamp}`
+  );
   
   await fs.copy(oldSettingsDir, backupPath, {
     filter: (src) => {

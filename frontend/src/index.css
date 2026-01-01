@@ -62,6 +62,11 @@ body {
   color: #f57c00;
 }
 
+.status-badge.in-progress {
+  background: #fff3e0;
+  color: #f57c00;
+}
+
 .status-badge.done {
   background: #e8f5e9;
   color: #388e3c;
@@ -156,6 +161,10 @@ body {
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
   min-width: 400px;
   max-width: 600px;
+  max-height: 90vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .modal h2 {
@@ -165,10 +174,58 @@ body {
 
 .modal-body {
   margin-bottom: 20px;
+  overflow: auto;
+  flex: 1;
 }
 
 .modal-footer {
   display: flex;
   gap: 10px;
   justify-content: flex-end;
+  padding-top: 12px;
+  border-top: 1px solid #eee;
+  background: white;
+}
+
+.timeline {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.timeline-entry {
+  background: white;
+  border: 1px solid #ddd;
+  border-left: 4px solid #ccc;
+  padding: 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.timeline-entry.selected {
+  outline: 2px solid #1976d2;
+}
+
+.timeline-entry.done {
+  border-left-color: #388e3c;
+}
+
+.timeline-entry.failed {
+  border-left-color: #e74c3c;
+}
+
+.timeline-entry.running,
+.timeline-entry.in-progress {
+  border-left-color: #f57c00;
+}
+
+@keyframes timeline-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(245, 124, 0, 0.4); }
+  70% { box-shadow: 0 0 0 8px rgba(245, 124, 0, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(245, 124, 0, 0); }
+}
+
+.timeline-entry.running {
+  animation: timeline-pulse 1.5s infinite;
 }

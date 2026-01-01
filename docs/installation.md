@@ -1,230 +1,87 @@
 # Инструкция по установке NCrew
 
-Это руководство поможет вам установить и настроить NCrew на вашем компьютере.
+NCrew — UI + backend для управления задачами и запуска `opencode` в изолированных Git worktree.
 
-## Системные требования
+## Требования
 
-### Обязательно
+- **Node.js**: 18+
+- **npm**: 9+
+- **Git**: 2+
+- **opencode CLI**: установлен и доступен в `PATH`
 
-- **Node.js**: версии 18.x или выше
-- **Git**: версии 2.x или выше
-- **npm**: версии 9.x или выше
-
-### Дополнительно
-
-- **opencode CLI**: Установлен и доступен в PATH
-  - Установка: см. https://github.com/sst/opencode
-- Git-репозиторий проекта, в котором будут выполняться задачи
-
-### Проверка требований
+Проверка:
 
 ```bash
-# Проверка Node.js
-node --version  # Должно быть >= 18
-
-# Проверка npm
-npm --version   # Должно быть >= 9
-
-# Проверка Git
-git --version   # Должно быть >= 2
-
-# Проверка opencode
-opencode --help # Должно показать справку
+node --version
+npm --version
+git --version
+opencode --help
 ```
 
 ## Установка
 
-### Шаг 1: Клонирование репозитория
-
 ```bash
 git clone <repository-url>
 cd ncrew
-```
 
-### Шаг 2: Установка зависимостей
-
-Установите зависимости для всех частей проекта:
-
-```bash
-# Корневые зависимости
 npm install
-
-# Backend зависимости
-cd backend
-npm install
-cd ..
-
-# Frontend зависимости
-cd frontend
-npm install
-cd ..
+cd backend && npm install && cd ..
+cd frontend && npm install && cd ..
 ```
 
-Или одной командой:
+## Первый запуск: системные файлы `~/.ncrew`
+
+При старте backend автоматически создаёт:
+
+```
+~/.ncrew/
+  settings/
+    projects/
+    models-cache.json
+  templates/
+  stage_prompts/
+```
+
+## Подготовка проекта (где будут задачи)
+
+Проект должен быть Git-репозиторием. Создайте папку задач:
 
 ```bash
-npm install && cd backend && npm install && cd ../frontend && npm install
+mkdir -p /путь/к/проекту/.memory_bank/tasks
 ```
 
-## Настройка
-
-### Шаг 1: Проверка структуры папок
-
-Убедитесь, что структура папок выглядит так:
-
-```
-ncrew/
-├── backend/
-│   ├── node_modules/
-│   ├── package.json
-│   └── server.js
-├── frontend/
-│   ├── node_modules/
-│   ├── package.json
-│   └── src/
-├── settings/
-│   └── projects/
-├── package.json
-└── README.md
-```
-
-### Шаг 2: Создание папки для настроек
-
-Папка `settings/projects/` создается автоматически при первом запуске, но можно создать её вручную:
-
-```bash
-mkdir -p settings/projects
-```
-
-### Шаг 3: Настройка проекта для задач
-
-В вашем целевом проекте (где будут выполняться задачи) создайте папку для задач:
-
-```bash
-cd /путь/к/вашему/проекту
-mkdir -p .memory_bank/tasks
-```
+Логи запусков будут сохраняться в `/путь/к/проекту/.memory_bank/logs/`, а worktree — в `/путь/к/проекту/worktrees/`.
 
 ## Запуск
 
-### Режим разработки
-
-Для разработки используйте concurrently для запуска backend и frontend:
+### Development
 
 ```bash
 npm run dev
 ```
 
-Это запустит:
-- Backend на http://localhost:3001
-- Frontend на http://localhost:3000
+- Frontend: `http://localhost:3000` (если порт занят — Vite выберет следующий)
+- Backend API: по умолчанию `http://localhost:3001` (если порт занят — `npm run dev` выберет следующий свободный и настроит proxy `/api` в Vite)
 
-### Отдельный запуск
-
-Для более детального управления запускайте компоненты отдельно:
-
-**Терминал 1 - Backend:**
-```bash
-npm run backend
-```
-
-**Терминал 2 - Frontend:**
-```bash
-npm run frontend
-```
-
-### Производственный режим
-
-Для продакшена используйте следующие команды:
+### Production (backend раздаёт `frontend/dist`)
 
 ```bash
-# Сборка frontend
-cd frontend
-npm run build
-
-# Запуск backend (serving frontend)
-cd ../backend
-NODE_ENV=production node server.js
+npm -C frontend run build
+node backend/server.js
 ```
 
-## Доступ к приложению
+Открыть: `http://localhost:3001`
 
-После запуска откройте браузер и перейдите по адресу:
+## Troubleshooting
 
-```
-http://localhost:3000
-```
-
-## Первичная настройка
-
-### 1. Добавление проекта
-
-1. Откройте http://localhost:3000
-2. Нажмите кнопку "Add Project"
-3. Заполните форму:
-   - **Name**: Название проекта (например, "My App")
-   - **Path**: Полный путь к папке проекта (например, `/home/dev/my-app`)
-   - **Model**: Выберите модель AI (например, `claude-3.5-sonnet`)
-   - **Provider**: Выберите провайдера (например, `anthropic`)
-4. Нажмите "Save"
-
-### 2. Проверка задач
-
-Если в вашем проекте уже есть задачи в `.memory_bank/tasks/`, они отобразятся в интерфейсе.
-
-Если нет, создайте первую задачу:
-
-```bash
-cd /путь/к/вашему/проекту/.memory_bank/tasks
-cat > test-task.md << 'EOF'
----
-title: Test task
-status: New
-priority: Low
----
-
-Это тестовая задача для проверки работы NCrew.
-EOF
-```
-
-Задача должна появиться в интерфейсе автоматически (благодаря file watching).
-
-### 3. Запуск тестовой задачи
-
-1. Найдите задачу "Test task" в списке
-2. Нажмите кнопку "Run"
-3. Наблюдайте за выполнением в разделе "Logs"
-
-## Конфигурация
-
-### Переменные окружения
-
-Создайте файл `.env` в корне проекта:
-
-```bash
-# Backend
-PORT=3001
-NODE_ENV=development
-
-# Frontend (для Vite)
-VITE_API_URL=http://localhost:3001
-```
+- `opencode` пишет файлы в домашнюю директорию (например, `~/.local/share/opencode/…`). Убедитесь, что процесс имеет права на запись.
 
 ### Настройка портов
 
-Для изменения портов редактируйте соответствующие файлы:
+Порты можно переопределять через переменные окружения:
 
-**Backend порт:** `backend/server.js`
-```javascript
-const PORT = process.env.PORT || 3001;
-```
-
-**Frontend порт:** `frontend/vite.config.js`
-```javascript
-server: {
-  port: 3000
-}
-```
+- Backend: `PORT=3002 npm run backend` (или `PORT=3002 node backend/server.js`)
+- Frontend proxy (Vite): `VITE_BACKEND_URL=http://localhost:3002 npm run frontend`
 
 ## Проверка установки
 
@@ -255,7 +112,9 @@ curl http://localhost:3001/api/projects
 lsof -i :3001  # macOS/Linux
 netstat -ano | findstr :3001  # Windows
 
-# Измените порт в backend/server.js
+# Вариант 1: `npm run dev` сам подберёт свободный backend-порт
+# Вариант 2: задать порт вручную
+PORT=3002 npm run backend
 ```
 
 **Проблема:** Module not found
@@ -270,7 +129,9 @@ npm install
 
 **Проблема:** Порт уже занят
 ```bash
-# Измените порт в frontend/vite.config.js
+# Vite обычно сам выберет следующий порт (если 3000 занят).
+# Если нужен фиксированный порт:
+VITE_PORT=3002 npm run frontend
 ```
 
 **Проблема:** Module not found
