@@ -1,0 +1,20 @@
+name: Opencode issue
+description: Issue tied to Opencode session
+title: "[Opencode]: "
+labels: [opencode]
+
+body:
+  - type: input
+    id: opencode_session_id
+    attributes:
+      label: Opencode session ID
+      description: "ID сессии в Opencode"
+      placeholder: "oc_abc123"
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      placeholder: "Что произошло / что нужно сделать"
